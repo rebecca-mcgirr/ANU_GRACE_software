@@ -1,0 +1,62 @@
+#!/bin/csh -f
+
+# extract ICs from an addnorm file and output in GRACE_IC.dat format
+
+if ($#argv == 0) then
+  echo "sh_make_GRACE_IC solution.file YYYY MM DD addnorm/fit apr/est"
+  exit
+endif
+
+set soln_file = $1
+set yr = $2
+set month = $3
+set day = $4
+set type = $5
+set soln = $6
+
+if ($type == "addnorm")then
+  # get the number of orbits in the addnorm file
+  set n_orbs = `head -1 $soln_file | awk '{print $12}'`
+
+  # find which orbit within the addnorm file contains the appropriate IC date 
+  set actual_orbit = `tail -n+2 $soln_file | head -$n_orbs | awk '{if ($4 == '$yr' && $5 == '$month' && $6 == '$day') {print $2}}'`   
+  #echo "Orbit for" $yr $month $day is number $actual_orbit
+  if (`echo $actual_orbit | wc -w` == 0)exit
+
+  # now, grep out the pos/vel ICs
+  if ($soln == "est") then
+    set pos = `grep "(mm)"   $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%18.7f", $9 / 1.e3}}'`
+    set vel = `grep "(mm/s)" $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%18.7f", $9 / 1.e3}}'`
+    set scl = `grep "(n/a)"  $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%16.7f", $9 / 1.e3}}'`
+    set bs  = `grep "(nm"    $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%16.7f", $9 / 1.e3}}'`
+  else if ($soln == "apr") then
+    set pos = `grep "(mm)"   $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%18.7f", $7 / 1.e3}}'`
+    set vel = `grep "(mm/s)" $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%18.7f", $7 / 1.e3}}'`
+    set scl = `grep "(n/a)"  $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%16.7f", $7 / 1.e3}}'`
+    set bs  = `grep "(nm"    $soln_file | awk '{if ($1 == '$actual_orbit') {printf "%16.7f", $7 / 1.e3}}'`
+  endif
+
+
+
+else if ($type == "fit") then
+  if ($soln == "est") then
+    set pos = `grep "(mm)"   $soln_file | awk '{printf "%18.7f", $8 / 1.e3}'`
+    set vel = `grep "(mm/s)" $soln_file | grep -v RMS | awk '{printf "%18.7f", $8 / 1.e3}'`
+    set scl = `grep "(n/a)"  $soln_file | awk '{printf "%16.7f", $8 / 1.e0}'`
+    set bs  = `grep "(um/s"  $soln_file | grep -v RMS | awk '{printf "%16.7f", $8 / 1.e0}'`
+  else if ($soln == "apr") then
+    set pos = `grep "(mm)"   $soln_file | awk '{printf "%18.7f", $6 / 1.e3}'`
+    set vel = `grep "(mm/s)" $soln_file | grep -v RMS | awk '{printf "%18.7f", $6 / 1.e3}'`
+    set scl = `grep "(n/a)"  $soln_file | awk '{printf "%16.7f", $6 / 1.e0}'`
+    set bs  = `grep "(um/s"  $soln_file | grep -v RMS | awk '{printf "%16.7f", $6 / 1.e0}'`
+  endif
+
+else
+  echo "Solution type" $type "not coded"
+  exit
+endif
+
+
+# now, write it to the screen
+echo $yr $month $day $pos[1] $pos[2] $pos[3] $vel[1] $vel[2] $vel[3] $scl[1] $scl[2] $scl[3] $bs[1] $bs[2] $bs[3] 0.0 0.0 0.0 0.0 0.0 0.0 0.0 $pos[4] $pos[5] $pos[6] $vel[4] $vel[5] $vel[6] $scl[4] $scl[5] $scl[6] $bs[4] $bs[5] $bs[6] 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+

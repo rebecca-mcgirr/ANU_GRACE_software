@@ -1,0 +1,80 @@
+#!/bin/csh -f
+
+# script to sum up the change in all mascons within a region, for a given solution fit file.
+#
+# P. Tregoning
+# 22 October 2019
+
+if ($#argv == 0 )then
+  echo "sh_sum_region -f addnorm_Aug01-10.fit -msc_file ~/gg/grace/tables/mascons_stage4_V003a -region Grnld2 -polygon_file ~/gg/grace/tables/mascon.polygons -t 2019 08 05 "
+  exit
+endif
+
+######### Defaults ##########
+set version = ~/gt
+set msc_file = ~/gg/grace/tables/mascons_stage4_V003a
+set poly_file = ~/gg/grace/tables/mascon.polygons
+set region = "Grnld2"
+#############################
+
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set fit_file = $input[2] ; shift argv  
+    breaksw
+    case -msc*:
+      set msc_file = $input[2] ; shift argv  
+    breaksw
+    case -region:
+      set region = $input[2] ; shift argv  
+    breaksw
+    case -t*:
+      set year  = $input[2] ; shift argv  
+      set month = $input[3] ; shift argv
+      set day   = $input[4] ; shift argv
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+
+
+# first, use Julia's python script to identify the primary mascons contained within the requested region
+echo Identify primary mascons licated in region $region
+echo python $version/util/pycodes/pygrab_mascons.py $msc_file $poly_file --region=$region --primflag=1
+python $version/util/pycodes/pygrab_mascons.py $msc_file $poly_file --region=$region --primflag=1 > pygrab.out
+set prim_nums = `grep "Primary number = " pygrab.out | awk '{printf "%5.5d ", $4}' | sed s/","/""/ `
+set prim_areas = `grep "Primary number = " pygrab.out | awk '{print $7/1.e6}'`
+set n_msc = `echo $prim_nums | wc -w`
+echo $n_msc primary mascons found in region: $prim_nums
+
+# calculate the epoch
+set epoch = ${year}_${month}_${day}
+set dec_yr = `doy $year $month $day | tail -1 | awk '{print $3}'`
+
+#foreach fit_file (../2019/addnorm_[J,A,S]????-??.fit)
+foreach fit_file (../2019/addnorm_*fft_batch5_V003a_24hr.fit)
+  # loop through the fit file and sum the mass changes
+  set imsc = 1
+  \rm ${region}_${epoch}.dat >& /dev/null ; touch ${region}_${epoch}.dat
+  echo Loop through the mascons for file $fit_file
+  while ($imsc <= $n_msc)
+#echo $imsc $prim_nums[$imsc] $prim_areas[$imsc] 
+    grep MC$prim_nums[$imsc] $fit_file | awk '{print $6, $7, '$prim_areas[$imsc]'}' >> ${region}_${epoch}.dat
+    set imsc = `echo $imsc | awk '{printf "%5.5d", $1 + 1}'`
+  end
+  set EWH = `weighted_sum ${region}_${epoch}.dat 	 | tail -1 | awk '{print $5 * 1.e3}'`
+
+  echo $dec_yr $EWH $region $year $month $day $fit_file
+# exit
+  
+end
+
+
+
+
+

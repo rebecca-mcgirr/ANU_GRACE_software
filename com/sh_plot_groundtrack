@@ -1,0 +1,160 @@
+#!/bin/csh -f
+
+# scipt to plot GRACE/GRACE-FO groundtracks for a particular day or month
+
+gmt gmtset FONT_TITLE 10    >& /dev/null
+gmt gmtset FONT_LABEL   15  >& /dev/null
+gmt gmtset PAPER_MEDIA a4+  >& /dev/null
+gmt gmtset PROJ_LENGTH_UNIT cm  
+
+if ($#argv == 0) then
+  echo "~/gt/com/sh_plot_groundtrack -t year month day [-list -mission 0/1 -mascons mascons_stage5_V005 -display_plot Y/N]"
+  echo "set day to '0' to plot entire month of groundtracks or 'filename.dat' to read list from a file given -input_list flag "
+  echo "given mascon file, plot of satellite passes over each mascon will also be generated"
+  exit
+endif
+
+##############################  Define default values      ##############################
+set mission = 0
+set version = "~/gt"
+set minlat = -95
+#set minlon = -160
+set maxlat = 95
+#set maxlon = 200
+set minlon = 60
+set maxlon = 120
+set map_anot = "10f10/30f15"
+set dot_size = 0.1
+set x_orig = "-X2"
+set y_orig = "-Y17"
+set coast_res = "-Dc"
+set plot_only = "N"
+set display = "Y"
+set mascons = "none"
+set cpt = colours.cpt
+set input_list = ""
+############################## Decipher input command line ##############################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -t:
+      set yr = $input[2]
+      set mon = $input[3]
+      set day = $input[4]
+    breaksw
+    case -input_list:
+      set input_list = "Y"
+    breaksw
+    case -mission:
+      set mission = $input[2]
+    breaksw 
+    case -mascons:
+      set mascons = $input[2]
+    breaksw
+    case -plot_only:
+      set plot_only = $input[2]
+    breaksw
+    case -display*:
+      set display = $input[2]
+    breaksw
+  endsw
+  if ( $#argv > 0 ) shift argv
+end
+
+############################################################
+# copy in the default setup file
+if ($mission == 0)then
+  cp    ~/gg/grace/templates/GRACE.input.template GRACE.input
+  set sat = "A"
+  set RL_num = "02"
+  set int = 5
+else if ($mission == 1) then
+  cp    ~/gg/grace/templates/GRACE_FO.input.template GRACE_FO.input 
+  set sat = "C"
+  set RL_num = "04"
+  set int = 25
+endif
+
+if ( $day != 0 && $day != 00 && $input_list == "") then
+  set day_list = $day
+  set pname = "groundtrack_${yr}-${mon}-${day}_${sat}"
+  set outfile = $pname".ps"
+else if ( $input_list == "Y") then
+  echo Reading list of days from file: $day
+  set day_list = `cat $day`
+  set pname = "groundtrack_${yr}-${mon}_${sat}"
+  set outfile = $pname".ps"
+else
+  set day_list = (01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31)
+  #set day_list = (01 02 03 04 05 06 07 08 09 10)
+  set pname = "groundtrack_${yr}-${mon}_${sat}"
+  set outfile = $pname".ps"
+endif
+
+if ($plot_only == "Y") goto plot
+
+echo "# lon lat" > groundtrack.lonlat
+echo "# radius" > groundtrack.radius
+
+
+foreach day ($day_list)
+  echo $yr $mon $day
+  if ( $mission == 0 ) then
+    ${version}/com/sh_extract_level1B $yr $mon $day GNV RL02
+  else if ( $mission == 1 ) then
+    ${version}/com/sh_extract_level1B_GRACEFO $yr $mon $day GNV RL04
+  endif
+  ${version}/util/xyz_to_llr $yr $mon $day $mission
+  #tail -n+2 LLR_${yr}-${mon}-${day}_${sat}.asc | awk '{print $2, $1}' >> groundtrack.lonlat
+  tail -n+2 LLR_${yr}-${mon}-${day}_${sat}.asc | awk '{print $1, $2}' >> groundtrack.lonlat
+  tail -n+2 LLR_${yr}-${mon}-${day}_${sat}.asc | awk '{print $3}' >> groundtrack.radius 
+  rm ???1B_${yr}-${mon}-${day}_?_${RL_num}.* LLR_${yr}-${mon}-${day}_${sat}.asc
+end
+
+############################################################
+# get average spherical altitude
+#set alt = `awk '{sum+=$1} END {print sum/NR - 6378137}' groundtrack.radius`
+set alt = `awk '{sum+=$1} END {print sum/(NR-1)}' groundtrack.radius`
+set nobs = `awk 'END{print (NR - 1)}' groundtrack.radius`
+echo altitude = $alt
+############################################################
+echo $nobs
+# call bin_obs_to_msc
+if ( $mascons != "none" ) then
+  ${version}/util/bin_obs_to_msc groundtrack.lonlat $nobs $mascons $mission
+endif
+
+if ($display == "N") exit
+
+plot:
+############################################################
+
+set mid_lon = `echo $minlon $maxlon | awk '{print ($1 + $2) / 2.0}'`
+set proj = "-JX18/9"
+gmt makecpt -Chaxby -T-4/100/5 -Iz -Do > $cpt
+
+set minlat = 0
+set maxlat = 90
+set minlon = 60
+set maxlon = 80
+set map_anot = 5f2.5g1/10f5g2.5
+tail -n+3 bin_obs_to_msc.out | gmt psxy -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba${map_anot}:."$pname":neSW -Sc0.25 -Wthin,grey -C$cpt $x_orig $y_orig -P -K > $outfile
+awk -v var="$int" 'NR % var == 0' groundtrack.lonlat | gmt psxy -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba${map_anot}:."$pname":neSW -S+$dot_size -Wthin,red -O -K >> $outfile
+echo "105 -70 12 0 0 LT Alt = "$alt" m"| gmt pstext $proj -R$minlon/$maxlon/$minlat/$maxlat -Wwhite -Gwhite -K -O  >> $outfile
+echo -68.0725  113.2666 | gmt psxy -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba${map_anot} -Sc1 -Wthin,red -K -O >> $outfile
+#set minlon = 0
+#set maxlon = 360
+#set map_anot = "60f30/30f15"es.
+set dot_size = 0.25
+
+
+tail -n+3 bin_obs_to_msc.out | gmt psxy -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba${map_anot}:."$pname":neSW -Sc$dot_size -Wthin,grey -C$cpt -K -O -Y-12 >> $outfile
+gmt psscale -C$cpt -Dx9c/1c+w12c/0.5c+jTC+h -Bxaf+l"Observations" -Y-2 -O >> $outfile
+
+
+
+
+
+gs $outfile
+
+exit

@@ -1,0 +1,231 @@
+#!/bin/csh -f
+
+# script to identify primary mascons that are either too small or too close to another, then 
+# fix the problem.
+#
+# P. Tregoning
+# 8 November 2018
+
+if ($#argv == 0)then
+  echo "sh_cleanup_mascon_file -f mascons_stage4 -out mascons_stage4_cleaned [-min_tern 100 -min_sep 50 (km) -only_small Y/N -max_tern 1000]"
+  exit
+endif
+
+##############################  Define default values      ##############################
+set version = "~/gt"
+set msc_file_out = "mascon_file.cleanup"
+# at least this many ternarys in each primary mascon
+set min_tern = 10
+# 150 km separation of centres of mass
+set min_sep = 150  
+# only remove small primarys in this pass
+set only_small = "N"
+# set max number of ternarys in a merged primary
+set max_tern = 2000
+############################## Decipher input command line ##############################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set msc_file_in = $input[2]
+    breaksw
+    case -out:
+      set msc_file_out = $input[2]
+    breaksw
+    case -min_tern:
+      set min_tern = $input[2]
+    breaksw
+    case -min_sep:
+      set min_sep = $input[2]
+    breaksw
+    case -only_small:
+      set only_small = $input[2]
+    breaksw
+    case -max_tern:
+      set max_tern = $input[2]
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+
+if ( ! -f $msc_file_in ) then
+    echo "cannot find input file: " $msc_file_in
+    exit 2
+endif
+
+##########################################################################################
+alldone:
+echo only_small = $only_small
+if($only_small == "Y")echo Will only repair small primary mascon issues
+
+#goto CoM_ocean
+#goto CoM
+
+##########################################################################################
+# identify the problematic small primary mascons. dist_flag provides the information
+##########################################################################################
+echo Create list of primary mascons with issues to resolve "(mascons.info)"
+${version}/util/dist_flag $msc_file_in junk info $min_tern $min_sep > mascon.info
+  
+# primary mascons with too few ternary mascons
+echo Minimum number of ternarys permitted: $min_tern
+set prim_small = `grep "fewer" mascon.info | awk '{if (substr($0,103,4) < '$min_tern') {print substr($0,57,7)}}' | sort -nr`
+echo "Problematic tiny primary mascons: " $prim_small
+
+# starting at the last one, merge them into the closest mascon of the same type
+date
+cp $msc_file_in msc_file_tmp
+set counter = 1
+foreach small ($prim_small)
+  # is it land or ocean?
+  set nearest_prim = `grep " "$small"  density " mascon.info | awk '{if (substr($0,66,7) < 1001.0) {print substr($0,101,7)} else {print substr($0,151,7)}}'`
+  # now merge it
+  if ($nearest_prim < $small)then
+    echo merge mascon $small into mascon $nearest_prim Step: $counter `date`
+    echo ${version}/util/merge_mascons msc_file_tmp $nearest_prim $small $max_tern
+    ${version}/util/merge_mascons msc_file_tmp $nearest_prim $small $max_tern >& /dev/null ; mv -f msc_file_tmp_${nearest_prim}m$small msc_file_tmp_$counter ; cp  msc_file_tmp_$counter msc_file_tmp
+    if (`grep NaN msc_file_tmp | wc -l ` > 0)exit
+    @ counter = $counter + 1
+  else
+    echo do not merge mascon $small into mascon $nearest_prim "because of possible counting/indexing issues"
+  endif
+
+end
+echo Completed first pass at removing small primary mascons `date`
+
+# check again for problem primary mascons
+${version}/util/dist_flag msc_file_tmp junk info $min_tern $min_sep > mascon.info.1
+# primary mascons with too few ternary mascons. These ones have their nearest mascon with a higher number than their number. Need
+# to reverse the order of moving them, which means changing the logic so that we don't mix up the book-keeping!
+echo Minimum number of ternarys permitted: $min_tern
+set prim_small = `grep "fewer" mascon.info.1 | awk '{if (substr($0,103,4) < '$min_tern') {print substr($0,57,7)}}' | sort -nr`
+echo "Remaining problematic small primary mascons: " $prim_small
+
+set i = 1
+\rm tmp >& /dev/null
+foreach small ($prim_small)
+  # is it land or ocean?
+  set prim_nearest = `grep " "$small"  density " mascon.info.1 | awk '{if (substr($0,66,7) < 1001.0) {print substr($0,101,7)} else {print substr($0,151,7)}}'`
+  echo $prim_nearest $small >> tmp
+  @ i = $i + 1
+end
+
+# now order them by decreasing nearest primary mascon number
+set prim_nearest2 = `sort -nr tmp | awk '{print $1}'`
+set prim_orig     = `sort -nr tmp | awk '{print $2}'`
+
+# now, merge the prim_nearest2 into the prim_small
+set i = 1
+foreach small ($prim_nearest2)
+  echo merge mascon $small into mascon $prim_orig[$i] Step: $counter `date`
+  echo ${version}/util/merge_mascons msc_file_tmp $prim_orig[$i] $small $max_tern 
+  ${version}/util/merge_mascons msc_file_tmp $prim_orig[$i] $small $max_tern >& /dev/null ; mv -f msc_file_tmp_${prim_orig[$i]}m$small msc_file_tmp_$counter ; cp  msc_file_tmp_$counter msc_file_tmp
+  @ i = $i + 1
+  @ counter = $counter + 1
+end
+
+# check that all small mascons have been removed
+${version}/util/dist_flag msc_file_tmp junk info $min_tern $min_sep > mascon.info.2
+set prim_small = `grep "fewer" mascon.info.2 | awk '{if (substr($0,103,4) < '$min_tern') {print substr($0,57,7)}}' | sort -nr`
+if (`echo $prim_small | wc -w` != 0)then
+  echo "Small primary mascons remain:" $prim_small ". There shouldn't be any left!"
+  exit
+else
+  # there are 56 steps to here as at 181108
+  echo Small primary mascons removed. $counter steps in process
+  echo Output of script is found in file:
+  ls -l msc_file_tmp
+endif
+
+if($only_small == "Y")then
+  echo Exiting after fixing small primary mascon issues
+  exit
+endif
+
+##########################################################################################
+
+CoM:
+echo minimum separation of mascons: $min_sep
+##########################################################################################
+# identify the problematic primary mascons with Land/Ocean CoM too close together
+##########################################################################################
+# STATUS :181108:1150:53.0 UTIL/dist_flag: Primary mascon centres of mass closer than 150 km together:   5694   250        131.664 km separation  1029.0  1000.0 (Name msc_file_tmp)
+
+# PT181122: I'm going to make use of dist_flag each time I merge a mascon. This overcomes
+#           the problem of possible re-ordering of primary mascons, but is computationally inefficient!!
+#set counter = 69
+echo `date` Running dist_flag 
+${version}/util/dist_flag msc_file_tmp junk info  $min_tern $min_sep  > mascon.info.3
+#set prim_too_close = `grep "Primary mascon" mascon.info.3 | awk '{if (substr($0,117,12) < '$min_sep' && substr($0,144,6) > 1000. && (substr($0,144,6) != substr($0,152,6)) ) {print substr($0,103,5)} else if (substr($0,117,12) < '$min_sep' && substr($0,144,6) < 1005.&& (substr($0,144,6) != substr($0,152,6)) ) {print substr($0,109,5)} }'`
+
+set prim_too_close = `grep "Primary mascon" mascon.info.3 | awk '{if (substr($0,123,12) < '$min_sep' && substr($0,150,6) > 1010. && (substr($0,150,6) != substr($0,158,6)) ) {print substr($0,108,5)}}'` #else if (substr($0,123,12) < '$min_sep' && substr($0,150,6) < 1005.&& (substr($0,150,6) != substr($0,158,6)) ) {print substr($0,115,5)} }'`
+echo $prim_too_close
+
+# now, loop through and fix one by one, the cases of land/ocean mascons being too close. Merge the ocean one with its closest ocean neighbour
+while (`echo $prim_too_close | wc -w` > 0)
+  #echo Primary ocean mascons with CoM too close to land: $prim_too_close
+  # find the nearest ocean mascon to the first one in the prim_too_close list
+  set prim2_ocean = `grep " "$prim_too_close[1]"  density" mascon.info.3 | awk '{print substr($0,153,5)}'`
+  # merge one into the other. It doesn't matter in which order.
+  echo Merge mascon $prim_too_close[1] into $prim2_ocean  "(Counter: "$counter ")" 
+  echo ${version}/util/merge_mascons msc_file_tmp  $prim2_ocean $prim_too_close[1] $max_tern
+  ${version}/util/merge_mascons msc_file_tmp  $prim2_ocean $prim_too_close[1] $max_tern >& /dev/null ; mv -f msc_file_tmp_${prim2_ocean}m${prim_too_close[1]} msc_file_tmp_$counter ; cp  msc_file_tmp_$counter msc_file_tmp
+  #${version}/util/merge_mascons msc_file_tmp  $prim2_ocean $prim_too_close[1]  ; mv -f msc_file_tmp_${prim2_ocean}m${prim_too_close[1]} msc_file_tmp_$counter ; cp  msc_file_tmp_$counter msc_file_tmp
+  @ counter = $counter + 1
+  # rerun dist_flag to update the mascon numbers. This is the inefficient part of this process .....
+  echo Re-running dist_flag "(Counter: "$counter ")"
+  ${version}/util/dist_flag msc_file_tmp junk info $min_tern $min_sep  > mascon.info.3
+  #set prim_too_close = `grep "Primary mascon" mascon.info.3 | awk '{if (substr($0,117,12) < '$min_sep' && substr($0,144,6) > 1000. && (substr($0,144,6) != substr($0,152,6)) ) {print substr($0,103,5)} else if (substr($0,117,12) < '$min_sep' && substr($0,144,6) < 1005.&& (substr($0,144,6) != substr($0,152,6)) ) {print substr($0,109,5)} }'`
+  set prim_too_close = `grep "Primary mascon" mascon.info.3 | awk '{if (substr($0,123,12) < '$min_sep' && substr($0,150,6) > 1010. && (substr($0,150,6) != substr($0,158,6)) ) {print substr($0,108,5)}}'` #else if (substr($0,123,12) < '$min_sep' && substr($0,150,6) < 1005.&& (substr($0,150,6) != substr($0,158,6)) ) {print substr($0,115,5)} }'`
+  echo Primary ocean mascons with CoM too close to land: $prim_too_close
+end
+echo `date` Finished fixing Land/Ocean CoM issues 
+
+
+CoM_ocean:
+##########################################################################################
+# identify the problematic primary mascons with Ocean/Ocean CoM too close together
+##########################################################################################
+# STATUS :181108:1150:53.0 UTIL/dist_flag: Primary mascon centres of mass closer than 150 km together:   5694   250        131.664 km separation  1029.0  1000.0 (Name msc_file_tmp)
+
+# PT181122: I'm going to make use of dist_flag each time I merge a mascon. This overcomes
+#           the problem of possible re-ordering of primary mascons, but is computationally inefficient!!
+#set counter = 97
+echo `date` Running dist_flag 
+${version}/util/dist_flag msc_file_tmp junk info  $min_tern $min_sep  > mascon.info.4
+#set prim_too_close = `grep "Primary mascon" mascon.info.4 | awk '{if ( (substr($0,117,12) < '$min_sep')  ) {print substr($0,103,5), substr($0,144,6), substr($0,152,6) } } ' | awk '{if ($2 == $3 && $2 > 1000. ) {print $1}}'`
+
+set prim_too_close = `grep "Primary mascon" mascon.info.4 | awk '{if ( (substr($0,123,12) < '$min_sep')  ) {print substr($0,108,5), substr($0,150,6), substr($0,158,6) } } ' | awk '{if ($2 == $3 && $2 > 1010. ) {print $1}}'`
+# now, loop through and fix one by one, the cases of land/ocean mascons being too close. Merge the ocean one with its closest ocean neighbour
+while (`echo $prim_too_close | wc -w` > 0)
+  echo Primary ocean mascons with CoM too close to another ocean mascon: $prim_too_close
+  # find the nearest ocean mascon to the first one in the prim_too_close list
+  set prim2_ocean = `grep " "$prim_too_close[1]"  density" mascon.info.3 | awk '{print substr($0,153,5)}'`
+  # merge one into the other. It doesn't matter in which order.
+  echo "(Counter: "$counter ")  "Merge mascon $prim_too_close[1] into $prim2_ocean   
+  ${version}/util/merge_mascons msc_file_tmp  $prim2_ocean $prim_too_close[1] $max_tern >& /dev/null ; mv -f msc_file_tmp_${prim2_ocean}m${prim_too_close[1]} msc_file_tmp_$counter ; cp  msc_file_tmp_$counter msc_file_tmp
+  @ counter = $counter + 1
+  # rerun dist_flag to update the mascon numbers. This is the inefficient part of this process .....
+  echo "(Counter: "$counter ")  "Re-running dist_flag 
+  ${version}/util/dist_flag msc_file_tmp junk info $min_tern $min_sep  > mascon.info.4
+  #set prim_too_close = `grep "Primary mascon" mascon.info.4 | awk '{if ( (substr($0,117,12) < '$min_sep')  ) {print substr($0,103,5), substr($0,144,6), substr($0,152,6) } } ' | awk '{if ($2 == $3 && $2 > 1000. ) {print $1}}'`
+  set prim_too_close = `grep "Primary mascon" mascon.info.4 | awk '{if ( (substr($0,123,12) < '$min_sep')  ) {print substr($0,108,5), substr($0,150,6), substr($0,158,6) } } ' | awk '{if ($2 == $3 && $2 > 1010. ) {print $1}}'`
+end
+echo `date` Finished fixing Ocean/Ocean CoM issues 
+
+#exit
+
+
+
+
+
+
+mv msc_file_tmp $msc_file_out
+
+echo Generating final information on the mascon geometries "(file: "$msc_file_out ")"
+echo ${version}/util/dist_flag $msc_file_out junk info $min_tern $min_sep  ">" mascon.info.final
+${version}/util/dist_flag $msc_file_out junk info $min_tern $min_sep  > mascon.info.final
+
+
+echo `date` Finished.
+

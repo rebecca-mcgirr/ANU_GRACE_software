@@ -1,0 +1,37 @@
+#Makefile variables for compute1,2 (Ubuntu linux)
+
+# ASSIGMENTS
+### GCC V4 gfortran flags ###
+FTN = gfortran
+#FFLAGS = -O3 -mcmodel=medium -Wuninitialized -fno-f2c -ffast-math -fno-automatic -fno-backslash  -fbounds-check -finit-local-zero
+FFLAGS = -cpp -O3 -mcmodel=small -fno-f2c -ffree-line-length-none -fno-backslash -fbounds-check -finit-local-zero -fopenmp -ftree-parallelize-loops=10
+#DEBUG
+#FFLAGS = -cpp -O0 -g  -mcmodel=medium -fno-f2c -ffree-line-length-none         -fno-backslash  -fbounds-check -finit-local-zero  -fopenmp
+
+CC = gcc
+CFLAGS = -g
+
+GRACEFIT_LIB = /Users/u6621369/ANU_GRACE_software/gracefit/gracefit_lib.a
+UTIL_LIB = /Users/u6621369/ANU_GRACE_software/util/util_lib.a
+GRACE_LIB = /Users/u6621369/ANU_GRACE_software/lib/grace_lib.a
+X11LIB = /usr/X11R6/lib
+II = /usr/include/X11
+# fortran 77 sofa library location
+SOFA_LIB = /Users/u6621369/sofa/20210512/f77/src/libsofa.a
+# netcdf-fortran libs
+NC_LIB = `pkg-config --libs netcdf-fortran`
+# netcdf-fortran flags
+NC_FFLAGS = `nf-config --fflags`
+# HDF5 and libaec libs
+H5_LIB = -L/opt/homebrew/Cellar/hdf5/1.14.1/lib -lhdf5hl_fortran -lhdf5_hl -lhdf5_fortran -lhdf5 -L/opt/homebrew/Cellar/libaec/1.0.6/lib -lsz -lz -ldl -lm
+# HDF5 flags
+H5_FFLAGS = -I/opt/homebrew/Cellar/hdf5/1.14.1/include
+# BLAS lib
+BLAS_LIB = /opt/homebrew/Cellar/openblas/0.3.23/lib/libopenblas.a
+
+UTILC_LIB = libutil_c.a
+FES_LIB = libfes.a
+
+UTILC_DIR = ~/ga/util_c
+FES_DIR = ~/ga/fes_src
+

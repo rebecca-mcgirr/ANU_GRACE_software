@@ -1,0 +1,144 @@
+#!/bin/csh -f
+
+# new script to do various things to the ACC1B data, then call a python script to enable interactive plotting of the values
+#
+# P. Tregoning
+# 6 August 2018
+
+if ($#argv == 0 ) then
+  echo "sh_plot_ACC_v4 -t YYYY MM DD -sats A/B/C/D A/B/C/D [-mission 0/1/2] [-extended] [-lin model1  mode2  model3 ] [-x start_epoch end_epoch] -fit fit_file "
+  echo " "
+  echo "NOTE: default modelling is 'none EMD2 none'"
+  exit
+endif
+
+##################### DEFAULT VALUES #######################
+set model = (none EMD2 none)
+set start = (1 1 1)
+set end = (86400 86400 86400)
+set fit_file = "none"
+set sats = (A B)
+set mission = 0
+set version = ~/ga
+set directory = ""
+############################################################
+
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -version:
+      set version = $input[2] ; shift argv
+    breaksw
+    case -t:
+      set yr     = $input[2] ; shift argv
+      set month  = $input[3] ; shift argv
+      set day    = $input[4] ; shift argv
+    breaksw
+    case -f*:
+      set fit_file = $input[2] ; shift argv
+    breaksw
+    case -mission:
+      set mission = $input[2] ; shift argv
+    breaksw
+    case -sats:
+      set sats[1] = $input[2] ; shift argv
+      set sats[2] = $input[3] ; shift argv
+    breaksw
+    case -lin:
+    case -model*:
+      set model[1]  = $input[2] ; shift argv
+      set model[2]  = $input[3] ; shift argv
+      set model[3]  = $input[4] ; shift argv
+    breaksw
+    case -x:
+      set start = ($input[2] $input[2] $input[2]) ; shift argv
+      set end   = ($input[3] $input[3] $input[3]) ; shift argv
+    breaksw 
+    case -mission:
+      set mission  = $input[2] ; shift argv
+    breaksw
+    case -ext*:
+      set directory = "extended_L1B/"  
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+echo start: $start
+echo end $end
+
+
+# print out what is going to happen
+echo "Plot ACC1B data for day " $yr $month $day "for satellites " $sats[1] $sats[2] using models $model
+
+# one or two satellites
+if($sats[1] == $sats[2])then
+  set nsats = 1
+  set swap_sign =  1
+else
+  set nsats = 2
+  set swap_sign = -1
+endif
+
+# one or two satellites
+if($sats[1] == $sats[2])then
+  set nsats = 1
+else
+  set nsats = 2
+endif
+
+# create the ACC1B file name, depending on date and mission
+if ($mission == 0)then
+  set RL_num = 02
+  set acc1b_file1 = ${directory}ACC1B_${yr}-${month}-${day}_${sats[1]}_${RL_num}.asc
+  if($nsats == 2)set acc1b_file2 = ${directory}ACC1B_${yr}-${month}-${day}_${sats[2]}_${RL_num}.asc
+else if ($mission == 1) then
+  set RL_num = 04
+  set acc1b_file1 = ${directory}ACT1B_${yr}-${month}-${day}_${sats[1]}_${RL_num}.txt
+  if($nsats == 2)set acc1b_file2 = ${directory}ACT1B_${yr}-${month}-${day}_${sats[2]}_${RL_num}.txt
+endif
+
+# now, call model_acc_v2 to extract and output the ACC1B data, inlcuding fitting whatever type of linearising model requested
+if($nsats == 1) then
+  echo ${version}/util/model_acc_v2 $acc1b_file1 $model[1] $start[1] $end[1]  $model[2] $start[2] $end[2] $model[3] $start[3] $end[3]
+  ${version}/util/model_acc_v2 $acc1b_file1 $model[1] $start[1] $end[1]  $model[2] $start[2] $end[2] $model[3] $start[3] $end[3] > tmp.out
+  grep "removed long-wavelength components" tmp.out
+  cat tmp.out | grep -v "STATUS" | tail -n+2 > acc1b_sat1.dat
+  # use the a priori obs as the second satellite. Remove a mean value to make it compatible with the EMD filtered data
+  #cat acc1b_sat1.dat | awk '{print $1, $5}' > tmp
+  #set mean1 = `${version}/util/w_mean tmp noweights skip | grep "The  mean is" | awk '{print $4}'`  
+  #cat acc1b_sat1.dat | awk '{print $1, $6}' > tmp
+  #set mean2 = `${version}/util/w_mean tmp noweights skip | grep "The  mean is" | awk '{print $4}'`  
+  #cat acc1b_sat1.dat | awk '{print $1, $7}' > tmp
+  #set mean3 = `${version}/util/w_mean tmp noweights skip | grep "The  mean is" | awk '{print $4}'`  
+
+  set mean1 = 0.
+  set mean2 = 0.
+  set mean3 = 0.
+  cat acc1b_sat1.dat | awk '{print $1, $5 - '$mean1', $6 - '$mean2', $7 - '$mean3'}' > acc1b_sat2.dat
+
+
+else if ($nsats == 2) then
+
+  ${version}/util/model_acc_v2 $acc1b_file1 $model[1] $start[1] $end[1]  $model[2] $start[2] $end[2] $model[3] $start[3] $end[3] | grep -v "STATUS" | tail -n+2 > acc1b_sat1.dat
+
+  ${version}/util/model_acc_v2 $acc1b_file2 $model[1] $start[1] $end[1]  $model[2] $start[2] $end[2] $model[3] $start[3] $end[3] | grep -v "STATUS" | tail -n+2 > acc1b_sat2.dat
+endif
+
+# first call the python script to plot the EMD components
+if ($model[2] == "EMD3" || $model[2] == "EMD2" || $model[2] == "EMD1")python ${version}/com/plot_emd_decomp.py emd.decomp2 &
+if ($model[2] == "fft")python ${version}/com/plot_acc_fft.py fft.spec2 &
+
+# now call the python script to plot the data
+python ${version}/com/plot_acc.py acc1b_sat1.dat acc1b_sat2.dat $swap_sign &
+
+exit
+
+
+
+
+
+

@@ -1,0 +1,293 @@
+#!/bin/csh -f
+#
+# sh_plot_kbra: to plot range accelerations
+#            - modified from sh_plot_kbrr_v3 20180828 HM
+#            - may be some fossils remaining from kbrr version
+
+if ($#argv == 0 ) then
+  echo "sh_plot_kbra -f gracefit_2010-09-16_12.kba -y -20 20 -x 0 2900 -yanot 1f0.5 -xanot 1080f540 -convert -plot Y/N -prefit Y/N -ant_plot Y/N -arctic_plot Y/N -leg_anot 0.2  -extra_file file.dat  -trim -dot 1400 "
+  exit
+endif
+
+# PT220117: remove any possible ./gmt.conf which may contain incorrect information for the computer the user is on
+rm ./gmt.conf >& /dev/null 
+
+gmt gmtset FONT_TITLE 15    >& /dev/null
+gmt gmtset FONT_LABEL   15  >& /dev/null
+gmt gmtset PAPER_MEDIA a4+  >& /dev/null
+
+##################### SET DEFAULT VALUES    #######################
+set ymin = -60
+set ymax = 60
+set xmin = 1
+set xmax = 18000
+set yanot = 10f5
+set xanot = 2000f500
+set header = "blah"
+set plot = "Y"
+set plot_text = "N"
+set gs_conv = "N"
+set nvals = 0
+set dot_epoch = -99
+set prefit = "N"
+set leg_anot = 0.05
+set extra_file = ""
+set trim = "N"
+set kbscale = 1.0
+set overlay = "N"
+set pre_label = "N"
+set pre_or_post = "Postfit"
+set accel = "N"
+set ant_plot = "N"
+set arctic_plot = "N"
+set colourmap = "haxby"
+set version = ~/ga
+set non_zero = "N"
+set reverse = ""
+set dot_size = 0.1
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set kb_file_in  = $input[2]
+    breaksw
+    case -y:
+      set ymin = $input[2] ; shift argv  
+      set ymax = $input[3] ; shift argv
+    breaksw
+    case -yanot:
+      set yanot = $input[2]
+echo new yanot $yanot
+    breaksw
+    case -x:
+      set xmin = $input[2] ; shift argv  
+      set xmax = $input[3] ; shift argv
+    breaksw
+    case -xanot:
+      set xanot = $input[2]
+    breaksw
+    case -header:
+      set header = $input[2]
+    breaksw
+    case -plot:
+      set plot = $input[2] ; shift argv
+    breaksw
+    case -t:
+      set plot_text = "Y"
+      set text = $input[2] ; shift argv
+    breaksw
+    case -amps:
+      set header = $input[2] ; shift argv
+      set header = ($header $input[3]) ; shift argv
+      set header = ($header $input[4]) ; shift argv
+      set header = ($header $input[5]) ; shift argv
+      set header = ($header $input[6]) ; shift argv
+      set header = ($header $input[7]) ; shift argv
+    breaksw
+    case -conv*:
+      set gs_conv = "Y"
+    breaksw
+    case -running_mean:
+      set nvals = $input[2] ; shift argv
+    breaksw
+    case -dot:
+      set dot_epoch = $input[2] ; shift argv
+    breaksw
+    case -prefit:
+      set prefit = $input[2] ; shift argv
+    breaksw
+    case -leg_anot:
+      set leg_anot = $input[2] ; shift argv
+    breaksw
+    case -extra_file:
+      set extra_file = $input[2] ; shift argv
+    breaksw
+    case -kbscale:
+      set kbscale = $input[2] ; shift argv
+    breaksw
+    case -trim:
+      set trim = "Y"
+    breaksw
+    case -o*:
+      set overlay = $input[2] ; shift argv
+    breaksw
+    case -pre_label:
+      set pre_label = $input[2] ; shift argv
+    breaksw
+    case -ant_plot:
+      set ant_plot = $input[2] ; shift argv
+    breaksw
+    case -arctic*:
+      set arctic_plot = $input[2] ; shift argv
+    breaksw
+    case -non_zero:
+      set non_zero = $input[2] ; shift argv
+    breaksw
+    case -col*:
+      set colourmap = $input[2] ; shift argv
+    breaksw
+    case -reverse:
+      set reverse   = $input[2] ; shift argv
+    breaksw
+    case -dot_size:
+      set dot_size   = $input[2] ; shift argv
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+if (`echo $header | wc -w` == 1 ) then
+  if($header == "blah")then
+    set header = $kb_file_in
+  endif
+endif
+
+# PT150618: if the input file is prefit.res then change the label to "Prefit"
+if($kb_file_in == "prefit.res")set pre_label = "Y"
+
+echo axes are X: $xmin $xmax Y: $ymin $ymax
+
+# set default dot epoch to be $xmin if it still has the default value of -99
+if ($dot_epoch == "-99")then
+  set dot_epoch = $xmin
+else
+  echo will plot satellite location at epoch $dot_epoch
+endif
+
+if ($reverse == "Y")set reverse = "-I"
+gmt makecpt -C$colourmap -T$ymin/$ymax/$leg_anot $reverse  > kbra.cpt
+
+set outfile = kbra.ps
+
+set text = "KB range accel (nm/s@+2@+)"
+cp ${kb_file_in} kb_file
+
+
+####################################################################################
+# PT170321: for gmt5 we need to repeat the definition of -J and -R for each program
+if($ant_plot == "Y")then
+  set minlat = -90
+  set minlon = 0
+  set maxlat = -60
+  set maxlon = 360     
+  set proj = `echo $maxlat | awk '{printf "-JS0/-89.9/%4.1f/14\n", $1 + 90.}'`
+  set range = "-R"$minlon/$maxlon/$minlat/$maxlat
+else if($arctic_plot == "Y")then
+  set minlat = 57
+  set minlon = 0
+  set maxlat = 90
+  set maxlon = 360     
+  set proj = `echo $minlat | awk '{printf "-JS0/89.9/%4.1f/14\n", 90. - $1}'`
+  set range = "-R"$minlon/$maxlon/$minlat/$maxlat
+else
+  set proj = "-JR30/20"
+  set range = "-Rg"
+endif
+####################################################################################
+
+# First, plot the map showing the groundtrack and the residuals.
+if ($trim == "Y")then
+  set trim_min = $xmin
+  set trim_max = $xmax
+else
+  set trim_min = $xmin
+  set trim_max = $xmax
+endif
+echo trim_min trim_max: $trim_min $trim_max
+if ($prefit == "Y")then
+  tail -n+7 kb_file | awk '{if ($3 != 0 && $4 != 0 && ( $1 > '$trim_min' && $1 < '$trim_max') ) {print $4, $3, substr($0,154,16) * 1000 / '$kbscale' , $1 }}' > tmp.dat  
+  #'
+  if($non_zero == "N")cat tmp.dat | awk '{if ($3 != 0.0) {print $0}}' > tmp2.dat ; cp tmp2.dat tmp.dat
+  gmt pscoast $proj $range -Ba1000:."Prefit K-Band residuals $kb_file_in":nesw -Dc -X0.5 -Y15 -P -K -W3,200/200/200 > $outfile
+else
+  tail -n+7 kb_file | awk '{if ($3 != 0 && $4 != 0 && ( $1 > '$trim_min' && $1 < '$trim_max') ) {print $4, $3, $2 * 1000 / '$kbscale', $1}}' > tmp.dat  
+  #'
+  cp tmp.dat tmp2.dat
+  if($non_zero == "N")cat tmp.dat | awk '{if ($3 != 0) {print $0}}' > tmp2.dat 
+  cp tmp2.dat tmp.dat
+# PT150616: fix the labelling of prefit/postfit for specific cases
+  if($pre_label == "Y")set pre_or_post = "Prefit"
+  gmt pscoast $proj $range -Ba1000:."$pre_or_post K-Band RA residuals $kb_file_in":nesw -Dc -X0.5 -Y15 -P -K -W3,200/200/200 > $outfile
+endif
+
+
+gmt psxy tmp.dat $proj $range -O -K -Sc${dot_size} -Ckbra.cpt >> $outfile
+gmt pscoast $proj $range -Dc -W2,100/100/100 -O -K -A10000 >> $outfile
+gmt psscale -Ckbra.cpt -D9.6/-0.6/15/0.3h -Ba${yanot}:"nm/s@+2@+": -O -K >> $outfile
+
+# plot a star at the starting point on the orbit
+gmt psxy $proj $range -O -K -Sa0.3 -G0 << end >> $outfile
+`head -1 tmp.dat`
+end
+# also, plot a red dot at the $dot_epoch of the time series
+echo dot epoch = $dot_epoch
+cat tmp.dat | awk '{if ($4 == '$dot_epoch') {print $0} }' > tmp.symbol   #'
+gmt psxy tmp.symbol $proj $range -O -K -Sc0.3 -G255/0/0  >> $outfile
+
+##### time series ####
+####################################################################################
+# PT170321: for gmt5 we need to repeat the definition of -J and -R for each program
+set proj = "-JX17/10"
+set range = "-R"$xmin/$xmax/$ymin/$ymax
+####################################################################################
+
+#set yanot = `echo $ymax $ymin $yanot| awk '{if ($1 - $2 > 15) {print "10f5"} else {print $3}}'`
+
+if ($prefit == "Y")then
+  tail -n+7 kb_file | awk '{print $1 , substr($0,154,16) * 1000 / '$kbscale', substr($0,154,16) * 1000 / '$kbscale' }' > tmp.dat 
+  if($non_zero == "N")cat tmp.dat | awk '{if ($2 != 0.0) {print $0}}' > tmp2.dat ; cp tmp2.dat tmp.dat
+  gmt psxy tmp.dat $proj $range -Ba${xanot}:"Epoch":/${yanot}:"Prefit $text ":neSW -Sc${dot_size} -Ckbra.cpt -X+2.0 -Y-13 -O -K >> $outfile
+else
+  tail -n+7 kb_file | awk '{print $1 , $2 * 1000 / '$kbscale', $2 * 1000 / '$kbscale' }' > tmp.dat 
+  if($non_zero == "N")cat tmp.dat | awk '{if ($2 != 0.0) {print $0}}' > tmp2.dat ; cp tmp2.dat tmp.dat
+  gmt psxy tmp.dat $proj $range -Ba${xanot}:"Epoch":/${yanot}:"$pre_or_post $text":neSW -Sc${dot_size} -Ckbra.cpt -X+2.0 -Y-13 -O -K >> $outfile
+  if($extra_file != "")gmt psxy tmp.dat $proj $range -Ba${xanot}:"Epoch":/${yanot}:"$pre_or_post $text":neSW -W1,lightgray -O -K >> $outfile
+endif
+
+# plot an extra file of residuals if requested. Assume that the file is epoch, value (in um/s)
+if ( $overlay != "N") then
+  tail -n+7 $overlay | awk '{print $1 , substr($0,154,16) * 1000 / '$kbscale', substr($0,154,16) * 1000 / '$kbscale' }' > tmp.dat 
+  gmt psxy tmp.dat $proj $range  -Wthick,100/100/100  -O -K >> $outfile
+else
+  echo not plotting any extra file
+endif
+
+
+if ($plot_text == "Y")then
+  set text_x = `echo $xmin | awk '{print $1 + 100}'`
+  set text_y = `echo $ymax $yanot | awk '{print $1 - $2}'`
+  gmt pstext $proj $range -O -K << end >> $outfile
+$text_x $text_y 18 0.0 0 0 $text
+end
+endif
+
+# perhaps plot a running mean
+if ($nvals > 0 ) then
+  smooth tmp.dat $nvals > tmp.smoothed
+  gmt psxy tmp.smoothed $proj $range -O -K -Wthick,100/100/100 >> $outfile
+endif
+
+# plot the red dot at the start of the time series
+# PT201001: this gets the wrong epoch if there are gaps in the data ....
+set dot_obs = `cat tmp.dat | awk '{if ($1 == '$dot_epoch') {print NR}}'` 
+if($dot_obs == "")set dot_obs = 1
+echo dot_obs = $dot_obs
+head -$dot_obs tmp.dat | tail -1 > dot.dat #'
+echo plotting a dot on the time series at `cat dot.dat`
+gmt psxy dot.dat $proj $range -O  -Sc0.3  -G255/0/0  >> $outfile
+
+
+echo $plot $gs_conv
+if ($gs_conv == "Y")then
+  gs -sDEVICE=jpeg -sOutputFile=kbra.jpg -dNOPAUSE -dBATCH -dSAFER kbra.ps >& /dev/null
+  echo converted kbra.ps to kbra.jpg
+endif
+
+# show the min/max values
+gmt gmtinfo  tmp.dat 
+
+if ($plot == "Y")gs $outfile
+
+ 

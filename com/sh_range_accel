@@ -1,0 +1,39 @@
+#!/bin/csh -f
+
+# script to compare range rate and range accelerations derived analytically and by time differentiation. If I can
+# prove that our time derivatives do not attenuate the signal then we can justify generating our own KBRR and KBRA
+
+if ($#argv == 0 )then
+  echo "Runstring: sh_range_accel YYYY MM DD"
+  exit
+endif
+
+
+set year = $1
+set month = $2
+set day = $3
+
+# define names for the orbits
+set truth_A = "GTORB_"${year}-${month}-${day}_00-00-00_A_02.bin_truth
+set truth_B = "GTORB_"${year}-${month}-${day}_00-00-00_B_02.bin_truth
+
+set pert_A = "GTORB_"${year}-${month}-${day}_00-00-00_A_02.bin_pert
+set pert_A = "GTORB_"${year}-${month}-${day}_00-00-00_A_02.bin_pert
+
+# first, extract from the GTORB files the position and velocity for the "truth" orbits
+# GRACE A truth
+echo "GRACE A truth pos/vel" > truth_A.posvel
+set i = 28
+while ($i < 17300)
+  $version/util/read_GTORB_record $truth_A $i G 0 | grep -v "UTIL" | awk '{print $3, $4, $5, $6, $7, $8, $9}' >> truth_A.posvel
+  @ i = $i + 1
+end
+
+# GRACE B truth
+echo "GRACE B truth pos/vel" > truth_B.posvel
+set i = 28
+while ($i < 17300)
+  $version/util/read_GTORB_record $truth_B $i G 0 | grep -v "UTIL" | awk '{print $3, $4, $5, $6, $7, $8, $9}' >> truth_B.posvel
+  @ i = $i + 1
+end
+

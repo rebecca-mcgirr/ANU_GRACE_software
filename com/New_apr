@@ -1,0 +1,114 @@
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 16
+
+cd ..
+
+cd 2016-11-17
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 17
+
+cd ..
+
+cd 2016-11-18
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 18
+
+cd ..
+
+cd 2016-11-19
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 19
+
+cd ..
+
+cd 2016-11-20
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 20
+
+cd ..
+
+cd 2016-11-21
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 21
+
+cd ..
+
+cd 2016-11-22
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 22
+
+cd ..
+
+cd 2016-11-23
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 23
+
+cd ..
+
+cd 2016-11-24
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 24
+
+cd ..
+
+cd 2016-11-25
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 25
+
+cd ..
+
+cd 2016-11-26
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 26
+
+cd ..
+
+cd 2016-11-27
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 27
+
+cd ..
+
+cd 2016-11-28
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 28
+
+cd ..
+
+cd 2016-11-29
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 29
+
+cd ..
+
+cd 2016-11-30
+
+cp ../2016-11-15/gracesim_v1.cmd gracesim_v1.cmd
+
+~/gt_nogamit/com/truth_iter.sh -t 2016 11 30
+
+
+

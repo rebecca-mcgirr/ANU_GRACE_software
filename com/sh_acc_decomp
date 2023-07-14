@@ -1,0 +1,48 @@
+#!/bin/csh -f
+
+# script to take the kbra.decomp file, add together a subset of components and then plot them
+#
+# P. Tregoning
+# 30 September 2018
+
+if ($#argv == 0 )then
+  echo "sh_acc_decomp -f kbra.decomp -exclude 1 2 6"
+  exit
+endif
+
+set infile = emd_kbra.decomp
+set exclude = ""
+
+set version = ~/gt
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set infile  = $input[2]
+    breaksw
+    case -excl*:
+      set exclude_components = (`echo $argv | cut -d- -f2`); shift exclude_components
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+###############################################################
+
+alldone:
+
+# now, add up all the components
+echo ${version}/util/sum_components $infile `echo $exclude_components | wc -w | awk '{print $1 - 1}'` $exclude_components
+${version}/util/sum_components $infile `echo $exclude_components | wc -w | awk '{print $1 - 1}'` $exclude_components > sum_components.dat #'
+
+
+cat sum_components.dat | awk '{print $1, $2, $2, $2}' > kbra_all.dat
+cat sum_components.dat | awk '{print $1, $3, $3, $3}' > kbra_sum.dat
+
+# now try to plot this using plot_acc.py - it should be in this format
+echo python ${version}/com/plot_acc.py  kbra_all.dat kbra_sum.dat 0
+python ${version}/com/plot_acc.py  kbra_all.dat kbra_sum.dat 0 &
+
+
+

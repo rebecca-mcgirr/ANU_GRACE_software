@@ -1,0 +1,40 @@
+!   writesoln.h --  common variables for writesoln
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   SVs and epochs actually used
+    integer*4 :: nsat,isat(maxsat),nepoch,iepstart,iepstop
+    common /svepochs/ nsat,isat,nepoch,iepstart,iepstop
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! data used by write_soln
+    integer*4 :: gt_stime(maxtfil)
+    character(80) :: gt_fnam(maxtfil)
+    common /gtfinfo_writesoln/ gt_fnam, gt_stime
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! input filename data for input variance covariance matrices
+    character(100) :: R_matrix_filename, R_matrix_filedir, R_matrix_filename_initial
+    common /matrix/ R_matrix_filename, R_matrix_filedir, R_matrix_filename_initial
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! Data on how many k-band and gps observations were used, and how many records were missing
+    integer*4 :: iepoch, nkepochs, fkepochs, ngepochs, fgepochs
+    real*8 :: postfit_rms_hk, postfit_rms_hg
+    common /epoch_count/ postfit_rms_hk, postfit_rms_hg, iepoch, nkepochs, fkepochs, ngepochs, fgepochs
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! date entries
+     integer*4 :: datec(5), date_init(5)
+     common /date/ datec, date_init
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!
+!! PT190312: move this to mod_subs/soln_mod.f90
+!! PT130528: parameter character names and units
+!   character(30) :: prmnam(maxparm)
+!   common /params/prmnam
+

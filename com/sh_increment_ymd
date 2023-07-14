@@ -1,0 +1,38 @@
+#!/bin/csh -f
+
+# increment the ymd, using the unix "date" command and features
+#
+# P. Tregoning
+# 14 February 2022
+
+if($#argv  < 3)then
+  echo "sh_increment_ymd YYYY MM DD [next/previous  default is next]"
+  exit
+else
+  set year = $1
+  set month = $2
+  set day = $3
+endif
+
+if ($#argv == 3 || $4 == "next")then
+  set add_secs = 86400
+else if ($4 == "previous")then
+  set add_secs = -86400
+else
+  echo "4th argument must be either 'next' or 'previous'"
+  exit
+endif
+
+# do all computations in UTC
+setenv TZ UTC
+
+# get seconds since 01/01/1970 in utc
+set secs_since_1970 = `date -d ${year}-${month}-${day}T00:00:00 +%s`
+
+# add 86400 seconds to it
+@ secs_since_1970 = $secs_since_1970 + $add_secs
+
+# convert back to year, month, day
+set new_day = `date --date=@$secs_since_1970 +%G%m%e | awk '{printf "%4s %2.2d %2.2d",substr($0,1,4),substr($0,5,2),substr($0,7,2)}'`
+
+echo $new_day 

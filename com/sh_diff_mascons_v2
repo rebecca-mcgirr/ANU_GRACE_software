@@ -1,0 +1,10 @@
+#!/bin/csh -f
+#
+# Difference two mascon estimate files - at the ternary level - and then plot the result. Allows for
+# different primary mascon geometry - it assigns an estimate to each ternary mascon, differences them 
+# and then plots the differences.
+#
+# P. Tregoning
+# 28 February 2019
+
+

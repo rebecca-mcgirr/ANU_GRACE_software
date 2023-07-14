@@ -1,0 +1,655 @@
+#!/bin/csh -f
+
+# script to plot the new mascon file developed in November 2016.
+#  - uses colour_mascons to set mascon colours and create input files for GMT 
+# 
+# PT170322: modified to work under gmt5
+# PT170421: add -prim_num option to print primary mascon numbers
+# HM180426: add -ref option to difference fit_file wrt to a reference file
+# PT180907: repositioned the global plot to the top right of the page
+#
+# PT190228: modify the script to calculate and plot the difference between two estimated mascon fields, with the difference
+#           calculated on the ternarys (not the primary mascons) to enable different primary mascon configurations.
+# PT190603: provide option for a different colour scale for the polar plots
+# PT190605: add the option of plotting a time bar at the top of the plot
+# PT190628: changed coastline resolution for global plots
+# PT190725: allow user to define the length and annotation of the time bar
+# PT191005: do a landscape plot, with global on the left and Ant/Arctic on the right
+#
+#
+# The mascon file contains 3-tiered information on primary, secondary and ternary mascons:
+#
+##00000    4581    4581 1485118       1   69390   69390
+## setup by initialize_mascons  20161109 123654.048 +1100
+## modified by classify_mascons  20161109 123748.231 +1100
+## modified by separate_mascons to remove mixed ocean/land primary mascons.  Continental shelf depth: -150.000
+#1  PDeep       1    227   89.0588  185.7386  6356752.3   87393425632.  -4228.0 1029.   0.0     0       Ocean
+#1  SDeep     227          89.0588  185.7386  6356752.3   87393425632.  -4228.0 1029.     1   317       Ocean
+#1  TDeep    90.0000    0.0000  6356752.3     269748154.  -4228.0 1029.     1     1   317     0         Ocean
+#2  TDeep    89.8333   60.0000  6356752.5     359663635.  -4219.0 1029.     1     1   317     0         Ocean
+#3  TDeep    89.8333  120.0000  6356752.5     359663635.  -4187.5 1029.     1     1   317     0         Ocean
+
+
+### Primary line
+#prim_no Type num_secs num_terns  lat  lon    radius        area     bathy/topo density %land tidemask region_name
+#1  PDeep       1    227   89.0588  185.7386  6356752.3   87393425632.  -4228.0 1029.   0.0     0       Ocean
+
+# secondary line
+#sec_no Type num_terns      lat      lon       radius      area       bathy/topo density      col      region_name
+#1  SDeep     227          89.0588  185.7386  6356752.3   87393425632.  -4228.0 1029.     1   317       Ocean
+
+# ternary line
+#tern_no  label  lat      lon    radius         area    bathy/topo density prim  sec col_prim col_sec  region_name
+#1  TDeep    90.0000    0.0000  6356752.3     269748154.  -4228.0 1029.     1     1   317     0         Ocean
+
+gmt gmtset FONT_TITLE 10    >& /dev/null
+gmt gmtset FONT_LABEL   15  >& /dev/null
+gmt gmtset PAPER_MEDIA a4+  >& /dev/null
+gmt gmtset PROJ_LENGTH_UNIT cm  
+
+if ($#argv == 0) then
+  echo "sh_plot_mascon_file -f input_file -fit fit_file "
+  echo "           -ref reference_fit_file -ref_mascon reference_mascon_geometry_file "
+#  echo "           -mean_field mean_msc.dat"
+  echo "           -msc_type sec/tern -wrt prim/sec/tern -r minlat minlon maxlat maxlon" 
+  echo "           -plot Y/N -ant_plot Y/N -arctic_plot Y/N -polar Y/N -y miny maxy step_y "
+  echo "           -polar_y polar_min_y polar_max_y polar_step -yanot_polar 1000f500 "
+  echo "           -dot Y/N "
+  echo "           -polygon poly_file"
+  echo "           -time_bar  YYYY MM DD" 
+  echo "           -time_bar_size xmin xmax 4f2"
+  echo "           -rivers -Ia (for all rivers). Use -Na to get country/state boundaries"
+  echo "           -col_water to colour the oceans (use -S255 to make them all white)"
+  echo "           -vcv [default is that it would be a fit file]"
+  echo "           -apr [plot the apriori mascon values. Default is the estimated]"
+  echo "           -epoch start end  -gr plt_junk.kb plt_junk2.kb ... etc (the -gr argument must be last if used)"
+  echo " Note: option '-wrt tern' without a fit file will plot primary mascon numbers on <msc_type> mascon points"
+  echo "       (may be hard to read in large areas) "
+  echo " "
+  echo ' use "-prim_num Y" to print primary mascon numbers'
+  echo " "
+
+  echo Colour coding:
+  grep \!\!\! ~/gt/util/colour_mascons.f90 |sed s:\!::g
+  exit
+endif
+
+##############################  Define default values      ##############################
+set version = "~/ga"
+set fit_file = "N"
+set groundtrack_files = ""
+set msc_type = tern
+set wrt = prim
+set plot = "Y"
+set convert = "Y"
+set minlat = -90
+set minlon = -160
+set maxlat = 90
+set maxlon = 200
+set mascon_diff=${version}/util/mascon_diff
+set colour_mascons=${version}/util/colour_mascons
+#set colour_mascons=./colour_mascons
+set ant_plot = "N"
+set arctic_plot = "N"
+set polar = "N"
+set min_y = -805
+set max_y = 805
+set step_y = 1
+set polar_min_y = -10000
+set polar_max_y =  2000
+set polar_step_y = 10
+set yset = "N"
+set epoch1 = 1
+set epoch2 = 17280
+set user_dot = "Y"
+set user_dot_size = 0.2
+set yanot = "300f150"
+set yanot_polar = "2000f1000"
+set poly_file = ""
+set colourmap = "grace"
+set prim_nums = "N"
+set trim = "N"
+set xmin = 0
+set xmax = 18000
+set reverse = ""
+set msc_file_in = "~/gg/grace/tables/mascons_stage4"
+set ref_mascon_file  = "~/gg/grace/tables/mascons_stage4"
+set mean_field = ""
+set ref_file="N"
+set vcv = "N"
+set apr = "N"
+set add_polar = Y
+set range_set = "N"
+set map_anot = "60f30/30f15"
+set rivers = " "
+set colour_water = " "
+set time_bar = "N"
+set time_bar_xmin = 2000
+set time_bar_xmax = 2024
+set time_bar_anot = "4f1"
+set orient = ""
+set ext = ""
+############################## Decipher input command line ##############################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set msc_file_in = $input[2]
+    breaksw
+    case -fit:
+      set fit_file = $input[2]
+    breaksw
+    case -ref:
+      set ref_file = $input[2]
+    breaksw
+    case -ref_mascon:
+      set ref_mascon = $input[2]
+    breaksw
+    case -mean*:
+      set mean_field = $input[2]
+      echo "Will remove mean mascon field from file " $mean_field
+    breaksw
+    case -r:
+    case -R:
+      set minlat  = $input[2]
+      set minlon  = $input[3]
+      set maxlat  = $input[4]
+      set maxlon  = $input[5]
+      set add_polar = N
+      set range_set = "Y"
+    breaksw
+    case -m*:
+      set msc_type  = $input[2]
+    breaksw
+    case -w*:
+      set wrt  = $input[2]
+    breaksw
+    case -plot:
+      set plot  = $input[2]
+    breaksw
+    case -ant*:
+      set ant_plot  = $input[2]
+      set minlat = -90
+      set maxlat = -60
+      set minlon = 0
+      set maxlon = 360
+      if($ant_plot == "Y")set add_polar = "N"
+    breaksw
+    case -arctic*:
+      set arctic_plot  = $input[2]
+      set minlat = 55
+      set maxlat = 90
+      set minlon = 0
+      set maxlon = 360
+      if($arctic_plot == "Y")set add_polar = "N"
+    breaksw
+    case -polar:
+      set polar  = $input[2]
+      echo "Will plot both Arctic and Antarctic"
+      if($polar == "Y")set add_polar = "N"
+    breaksw
+    case -dot*:
+      set user_dot = "Y"
+      set user_dot_size  = $input[2]
+      echo User wants dot size of $user_dot_size
+    breaksw
+    case -y:
+        set min_y = $input[2]
+        set max_y = $input[3]
+        set step_y = $input[4]
+        set yset="Y"
+    breaksw
+    case -polar_y:
+        set polar_min_y = $input[2]
+        set polar_max_y = $input[3]
+        set polar_step_y = $input[4]
+        set yset="Y"
+    breaksw
+    case -yanot:
+      set yanot  = $input[2]
+    breaksw
+    case -yanot_polar:
+      set yanot_polar  = $input[2]
+    breaksw
+    case -epoch:
+    case -x:
+        set epoch1 = $input[2]
+        set epoch2 = $input[3]
+    breaksw
+    case -poly*:
+      set poly_file = $input[2]
+    breaksw
+    case -gr*:
+      set groundtrack_files = (`echo $argv | cut -d- -f2`); shift groundtrack_files
+    breaksw
+    case -colour*:
+      set colourmap  = $input[2]
+    breaksw
+    case -reverse:
+      set reverse  = ""
+    breaksw
+    case -convert*:
+      set convert  = $input[2]
+      echo will convert to jpg
+    breaksw
+    case -prim_num*:
+      set prim_nums  = $input[2]
+    breaksw
+    case -vcv:
+      set vcv  = "VCV"    
+    breaksw
+    case -apr*:
+      set apr  = "APR"  
+      echo "Will plot a priori mascon values"  
+    breaksw
+    case -map_anot:
+      set map_anot  = $input[2]
+    breaksw
+    case -river*:
+      set rivers  = $input[2]
+    breaksw
+    case -col_water:
+      set colour_water  = $input[2]
+    breaksw
+    case -time_bar:
+      set time_bar  = "Y"
+      set time_bar_epoch = ($input[2] $input[3] $input[4])
+      echo Time bar epoch: $time_bar_epoch
+    breaksw
+    case -time_bar_size:
+      set time_bar_xmin  = $input[2]
+      set time_bar_xmax  = $input[3]
+      set time_bar_anot  = $input[4]
+    breaksw
+    case -orient:
+      set orient  = $input[2]
+      if($orient == "L")set orient = ""
+    breaksw
+    case -ext:
+      set ext  = $input[2]
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+echo $msc_file_in
+
+if ( ! -f $msc_file_in ) then
+    echo "cannot find input file: " $msc_file_in
+    exit 2
+    endif
+
+alldone:
+
+###############################################
+#  primary mascons to show primary ID        ##
+###############################################
+if ($msc_type == "prim") then
+    set opt="-pt"
+    endif
+
+###############################################
+#  secondary mascons to show primary mascons ##
+###############################################
+if ($msc_type == "sec") then
+    set opt="-sp"
+    endif
+
+###############################################
+#   ternary mascons to show primary mascons  ##
+###############################################
+if ($msc_type == "tern" && $wrt == "prim") then
+    set opt="-tp"
+    endif
+
+###############################################
+#  ternary mascons to show secondary mascons ##
+###############################################
+if ($msc_type == "tern" && $wrt == "sec") then  
+    set opt="-ts"
+    endif
+
+###############################################
+#   ternary mascons to show ternary mascons  ##
+###############################################
+if ($msc_type == "tern" && $wrt == "tern") then  
+    set opt="-tt"
+    endif
+
+######################################################################
+echo "Option "$opt " - plot "$msc_type" mascons to show geometry of "$wrt" mascons"
+
+# HM180426: difference the fit_file wrt a ref_file if specified
+#           (mascon_diff will detect and adapt if either fit or ref file is in .vcv format)
+#           replace fit file with difference file in fit format and clear VCV option
+# PT190228: use program util/diff_ternarys instead to enable different primary mascon geometries
+if($ref_file != "N") then
+   echo "Subtracting mascon solution " $ref_file " from estimated solution " $fit_file "....."
+   echo $version/util/diff_ternarys $msc_file_in $fit_file $ref_mascon $ref_file msc_to_plot.dat
+   $version/util/diff_ternarys $msc_file_in $fit_file $ref_mascon $ref_file msc_to_plot.dat >& /dev/null
+
+   gmt gmtinfo msc_to_plot.dat
+#   $mascon_diff $fit_file $ref_file
+#   set fit_file = ./mdiff.fit
+#   set vcv = "N"
+
+else
+# set colours and write GMT plot file
+
+# PT180320: in an attempt to work around silly problems, call colour_mascons using range -90 0 90 360 so that we get a complete file.
+#           Change the plotting range later on to be what was requested.
+# colour_mascons now handles cases where the longitude range spans -ve to +ve -HM 161205
+  echo $colour_mascons $opt -90 0 90 360 $msc_file_in $fit_file $vcv $apr N 10
+  $colour_mascons $opt -90 0 90 360 $msc_file_in $fit_file $vcv $apr N 10
+endif
+
+
+# now set the plotting range
+set range = "$minlat $minlon $maxlat $maxlon"
+echo "Plot coordinate range: Lat $minlat $maxlat  Lon $minlon $maxlon"
+
+# merge groundtrack files into one
+echo Groundtrack files: $groundtrack_files
+\rm groundtrack.kb >& /dev/null ; echo "groundtrack files: " $groundtrack_files > groundtrack.kb
+if (`echo $groundtrack_files | wc -w`  > 0 )then
+  head -7 $groundtrack_files[1] >> groundtrack.kb
+  foreach file ($groundtrack_files)
+    # PT190506: only output coords if there are actual obs (i.e. don't output zero values)
+    tail -n+7 $file | awk '{if ($2 != 0.0) {print $0}}' >> groundtrack.kb
+  end
+endif
+  
+
+plot:
+
+# PT180307: change the default colour range if no fit file provided and y range not set explicitly
+if ($yset != "Y" && $fit_file == "N")then
+  set min_y = 0
+  set max_y = 1600
+  set yset = "Y"
+  set reverse = ""
+endif
+
+# set titles
+if ($ref_file != "N")then
+  set plot_title = ( $fit_file" - "$ref_file )
+  set pname=`basename $fit_file`
+  set outfile = plot_$pname.ps
+else if($fit_file  == "N") then
+  set pname=`basename $msc_file_in`
+  set plot_title = $pname$opt
+  set outfile = plot_$plot_title.ps
+else
+  set pname=`basename $fit_file`
+  set plot_title = $pname" fit"
+  set outfile = plot${ext}_${pname}.ps
+endif
+echo Name of postscript file: $outfile
+
+# set colour pallette
+if($yset == "Y")then
+  echo "yscale set: min,max,step =  " $min_y $max_y $step_y
+else
+#if($wrt != "tern")then
+#  set colour_range = `minmax msc_to_plot.dat | awk '{print $7}' | sed s/"<"/" "/ | sed s/">"/" "/ | sed s/"\/"/" "/ | awk '{print $1 - 50, $2 + 50}'`
+#   endif
+  echo "default colour range used"
+endif
+
+set colour_range = ($min_y $max_y)
+set colour_range_polar = ($polar_min_y $polar_max_y)
+echo colour range and step used in plot: $colour_range $step_y $wrt Polar: $colour_range_polar $polar_step_y
+echo gmt makecpt -C$colourmap -T$colour_range[1]/$colour_range[2]/$step_y $reverse
+gmt makecpt -C$colourmap -T$colour_range[1]/$colour_range[2]/$step_y $reverse > msc.cpt
+echo gmt makecpt -C$colourmap -T$colour_range_polar[1]/$colour_range_polar[2]/$polar_step_y $reverse
+gmt makecpt -Cgrace_lopsided5 -T$colour_range_polar[1]/$colour_range_polar[2]/$polar_step_y $reverse > msc_polar.cpt
+
+
+
+set mid_lon = `echo $minlon $maxlon | awk '{print ($1 + $2) / 2.0}'`
+set dot_size = `echo $minlon $maxlon | awk '{if ($2 - $1 > 180) {print 0.01} else {print 0.1}}'`
+# override this if we are plotting secondary mascons wrt primary
+if ($msc_type == "sec")set dot_size = 0.3
+
+
+## PT161130: change the projection if we want a stereographic plot of one of the poles
+if($ant_plot == "Y" )then
+  set proj = `echo $maxlat | awk '{printf "-JS0/-89.9/%4.1f/15\n", $1 + 90.}'`
+  set dot_size = 0.2
+  echo Will plot stereographic Antarctic plot $proj
+else if ($arctic_plot == "Y")then
+  set proj = `echo $minlat | awk '{printf "-JS0/89.9/%4.1f/15\n", 90. - $1 }'`
+  set dot_size = 0.2
+else
+  set proj = "-JR${mid_lon}/18"
+endif
+
+
+# PT170119: over-ride the dot size settings above if the user entered one
+if($user_dot == "Y")then
+  set dot_size = $user_dot_size
+  echo setting dot size to user_specified value of $dot_size
+endif
+
+# PT170421: extract primary mascon numbers in a format to print if required
+if($prim_nums == "Y")then
+  grep "  P" $msc_file_in | awk '{print $6, $5, "12,1,black 0   LB", $1}' > prim_nums.dat
+endif
+
+# PT171030: get values of mean mascon field corrections to apply, if required. File is just a list of lat/lon/value
+#           with mascons ordered so that the row equals the primary mascon number
+if($mean_field != "")then
+  echo "Removing mean field " $mean_field
+  paste msc_to_plot.dat $mean_field | awk '{printf "%10.5f %10.5f %10.5f\n", $1, $2, $3 - $6 }' > tmp.dat ; mv tmp.dat msc_to_plot.dat
+  echo `gmt gmtinfo msc_to_plot.dat | awk '{printf "Min/max values with mean removed: %10s\n",$7}'`
+  echo "RMS of difference between mascon fields: " `cat msc_to_plot.dat | awk '{print $3}' > junk ;  RMS junk`
+  set plot_title = ( ${plot_title}" - "$mean_field )
+endif
+
+
+###########################
+###                     ###
+###  The plotting part  ###
+###                     ###
+###########################
+echo poly_file = $poly_file
+
+# PT180322: define sizes etc differently for a single plot vs the combined polar plots of Antarctica and Arctic
+if ($polar == "Y")then
+  set x_orig = "-X4"
+  set y_orig = "-Y3"
+  set minlat = -90
+  set maxlat = -60
+  set minlon = 0
+  set maxlon = 360
+  set proj = `echo $maxlat | awk '{printf "-JS0/-89.9/%4.1f/12\n", $1 + 90.}'`
+  set dot_size = 0.2
+  set title_tmp = `echo $plot_title`
+  set plot_title = ""
+  set legend_adj = "-D6/-1.0/15/0.5h"
+  set coast_res = "-Dh"
+else if ($range_set == "Y")then
+  set x_orig = "-X2"
+  set y_orig = "-Y3.5"
+  set legend_adj = "-D9/-1.0/15/0.5h"
+  set coast_res = "-Dh"
+else if ($ant_plot == "Y")then
+  set x_orig = "-X2"
+  set y_orig = "-Y3"
+  set legend_adj = "-D7/-1.0/15/0.5h"
+  set coast_res = "-Dh"
+else
+  set x_orig = "-X2"
+  set y_orig = "-Y17"
+  set legend_adj = "-D9/-1.0/15/0.5h"
+  set coast_res = "-Dc"
+endif
+
+if ($add_polar == "Y")then
+  # antarctic
+  set x_orig1 = "-X-1"
+  set y_orig1 = "-Y-13.5"
+  set minlat1 = -90
+  set maxlat1 = -60
+  set minlon = 0
+  set maxlon = 360
+  set proj1 = `echo $maxlat1 | awk '{printf "-JS0/-89.9/%4.1f/9\n", $1 + 90.}'`
+  set coast_res_polar = "-Dc"
+  # arctic
+  set x_orig2 = "-X+10"
+  set minlat2 = 55
+  set maxlat2 = 90
+  set proj2 = `echo $minlat2 | awk '{printf "-JS0/89.9/%4.1f/9\n", 90. - $1 }'`
+  set legend_adj2 = "-D0/-1.0/15/0.5h"
+  set coast_res_polar = "-Dc"
+endif
+
+# PT190611: remove the title for plots using the time bar
+if($time_bar == "Y")then
+  set plot_title = ""
+endif
+
+echo plot_title = $plot_title
+
+# PT191005: set up new values for plot origins etc if we are doing a landscape plot instaed
+if ($orient != "P")then
+  set x_orig = "-X2"
+  set y_orig = "-Y5"
+  set proj = "-JR${mid_lon}/16"
+  set legend_adj2 = "-D0/-1.0/16/0.5h"
+  set coast_res_polar = "-Dc"
+  set legend_adj = "-D7.8/-1.0/14/0.5h"
+  # antarctic
+  set x_orig1 = "-X+17"
+  set y_orig1 = "-Y+6.5"
+  set minlat1 = -90
+  set maxlat1 = -60
+  set minlon = 0
+  set maxlon = 360
+  set proj1 = `echo $maxlat1 | awk '{printf "-JS0/-89.9/%4.1f/9\n", $1 + 90.}'`
+  # arctic
+  set x_orig2 = ""
+  set y_orig2 = "-Y-9.2"
+  set minlat1 = -90
+  set maxlat1 = -60
+  set minlon = 0
+  set maxlon = 360
+  set proj1 = `echo $maxlat1 | awk '{printf "-JS0/-89.9/%4.1f/9\n", $1 + 90.}'`
+  set legend_adj2 = "-D4/-0.3/9/0.4h"
+endif
+
+
+# plot the mascons
+if($wrt != "tern")then
+  echo plotting ternary mascons ...
+echo gmt psxy msc_to_plot.dat -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba${map_anot}:."$plot_title":neSW -Sc$dot_size -Cmsc.cpt $x_orig $y_orig $orient -K
+  gmt psxy msc_to_plot.dat -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba${map_anot}:."$plot_title":neSW -Sc$dot_size -Cmsc.cpt $x_orig $y_orig $orient -K > $outfile
+  gmt pscoast $proj -R$minlon/$maxlon/$minlat/$maxlat -O -K -Wthin,100/100/100 -A10000 $rivers $coast_res >> $outfile
+  gmt pscoast $proj -R$minlon/$maxlon/$minlat/$maxlat -O -K -Wthin,100/100/100 $colour_water $coast_res >> $outfile
+# PT170214: add the capability to plot a polygon around a region
+  if($poly_file != "")gmt psxy $proj -R$minlon/$maxlon/$minlat/$maxlat -O -K $poly_file -Wthin,black   -: >> $outfile
+
+  gmt psscale -Cmsc.cpt $legend_adj -Ba${yanot}:"EWH (mm)": -O -K >> $outfile
+else
+# plot the ternary mascon numbers only
+  echo plot ternary numbers only
+  gmt pscoast -Wthin,255/0/0  $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba1000:."$msc_file_in ternary numbers":nesw -X1 -Y5 -P -K $coast_res > $outfile
+  gmt pstext msc_to_plot.txt -: $proj -R$minlon/$maxlon/$minlat/$maxlat -O -K >> $outfile 
+endif
+
+# PT170421: plot the primary numbers if requested
+if($prim_nums == "Y")then
+  echo plot primary mascon numbers
+  gmt pstext prim_nums.dat $proj -R$minlon/$maxlon/$minlat/$maxlat -F+f+a+j -O -K >> $outfile 
+endif
+
+# plot a groundtrack if required
+if (`echo $groundtrack_files | wc -w` > 0)then
+  echo "Plotting satellite groundtrack from file(s)" $groundtrack_files  ...
+  tail -n+8 groundtrack.kb | awk -v ep1=$epoch1 -v ep2=$epoch2 '$1>ep1 && $1<ep2 {print $4, $3}' > groundtrack.lonlat
+  #gmt psxy groundtrack.lonlat $proj -R$minlon/$maxlon/$minlat/$maxlat -Wthin,200/200/200  -O -K  >> $outfile
+  gmt psxy groundtrack.lonlat $proj -R$minlon/$maxlon/$minlat/$maxlat -Sc0.05 -G200  -O -K  >> $outfile
+endif
+
+# PT180322: also plot the Arctic if both polar plots were requested
+if ($polar == "Y")then
+  set y_orig = "-Y+12.5"
+  set minlat = 55
+  set maxlat = 90
+  set proj = `echo $minlat | awk '{printf "-JS0/89.9/%4.1f/12\n", 90. - $1 }'`
+  set dot_size = 0.2
+  gmt psxy msc_to_plot.dat -: $proj -R$minlon/$maxlon/$minlat/$maxlat -Ba30f15:."$title_tmp":nesw -Sc$dot_size -Cmsc_polar.cpt $y_orig -O -K >> $outfile
+  gmt pscoast $proj -R$minlon/$maxlon/$minlat/$maxlat -O -K -Wthin,100/100/100 -A10000 $coast_res >> $outfile
+  if (`echo $groundtrack_files | wc -w` > 0)gmt psxy groundtrack.lonlat $proj -R$minlon/$maxlon/$minlat/$maxlat -Wthin,200/200/200  -O -K >> $outfile
+endif
+
+# PT180910: add the two polar plots if required
+if($add_polar == "Y" && $orient == "P")then
+  set dot_size = 0.2
+  echo Plot the Antarctic polar plot ....
+  gmt psxy msc_to_plot.dat -: $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -Ba30f15nesw -Sc$dot_size -Cmsc_polar.cpt $x_orig1 $y_orig1 -O -K >> $outfile
+  gmt pscoast $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -O -K -Wthin,100/100/100 -A10000 $coast_res_polar >> $outfile
+  if (`echo $groundtrack_files | wc -w` > 0)gmt psxy groundtrack.lonlat $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -Sc0.05 -G200  -O -K >> $outfile
+  echo plot the Arctic polar plot ....
+  gmt psxy msc_to_plot.dat -: $proj2 -R$minlon/$maxlon/$minlat2/$maxlat2 -Ba30f15nesw -Sc$dot_size -Cmsc_polar.cpt $x_orig2 -O -K >> $outfile
+  gmt pscoast $proj2 -R$minlon/$maxlon/$minlat2/$maxlat2 -O -K -Wthin,100/100/100 -A10000 >> $outfile
+  if (`echo $groundtrack_files | wc -w` > 0)gmt psxy groundtrack.lonlat $proj2 -R$minlon/$maxlon/$minlat2/$maxlat2 -Sc0.05 -G200  -O -K $coast_res_polar  >> $outfile
+  gmt psscale -Cmsc_polar.cpt $legend_adj2 -Ba${yanot_polar}:"EWH (mm)": -O -K >> $outfile
+endif
+
+# PT191005: do it in landscape mode if requested
+if($add_polar == "Y" && $orient != "P")then
+  echo plotting polar plots in landscape mode
+  set dot_size = 0.2
+  echo Plot the Antarctic polar plot ....
+echo gmt psxy msc_to_plot.dat -: $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -Ba30f15nesw -Sc$dot_size -Cmsc_polar.cpt $x_orig1 $y_orig1 -O -K
+  gmt psxy msc_to_plot.dat -: $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -Ba30f15nesw -Sc$dot_size -Cmsc_polar.cpt $x_orig1 $y_orig1 -O -K >> $outfile
+  gmt pscoast $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -O -K -Wthin,100/100/100 -A10000 $coast_res_polar >> $outfile
+  if (`echo $groundtrack_files | wc -w` > 0)gmt psxy groundtrack.lonlat $proj1 -R$minlon/$maxlon/$minlat1/$maxlat1 -Sc0.05 -G200  -O -K >> $outfile
+  echo plot the Arctic polar plot ....
+  gmt psxy msc_to_plot.dat -: $proj2 -R$minlon/$maxlon/$minlat2/$maxlat2 -Ba30f15nesw -Sc$dot_size -Cmsc_polar.cpt $y_orig2 -O -K >> $outfile
+  gmt pscoast $proj2 -R$minlon/$maxlon/$minlat2/$maxlat2 -O -K -Wthin,100/100/100 -A10000 >> $outfile
+  if (`echo $groundtrack_files | wc -w` > 0)gmt psxy groundtrack.lonlat $proj2 -R$minlon/$maxlon/$minlat2/$maxlat2 -Sc0.05 -G200  -O -K $coast_res_polar  >> $outfile
+  gmt psscale -Cmsc_polar.cpt $legend_adj2 -Ba${yanot_polar}:"EWH (mm)": -O -K >> $outfile
+endif
+
+if($time_bar == "Y" && $orient == "P")then  # plot a time bar with a dot at the appropriate epoch
+  set epoch = `~/ga/com/sh_graceseconds $time_bar_epoch | tail -1 | awk '{print $16}'`
+  # plot s timeline bar with a dot at the epoch
+  # to plot time bar above map of Australia
+  #  psxy -JX16/0.25 -R2001.9/2020.01/1/2 -Ba4f2Nesw -O -K -Y+17.4 -X+1.3 -Sc0.3 -G255/0/0 << end >> $outfile
+  # to plot time bar between global map and the polar plots
+  psxy -JX18/0.5 -R$time_bar_xmin/$time_bar_xmax/1/2 -Ba${time_bar_anot}Nesw -O -K -Y+9.35  -X-10. -Sc0.3 -G255/0/0 << end >> $outfile
+$epoch 1.5
+end
+endif
+if($time_bar == "Y" && $orient != "P")then  # plot a time bar with a dot at the appropriate epoch
+  echo Plot time bar in landscape mode
+  set epoch = `~/ga/com/sh_graceseconds $time_bar_epoch | tail -1 | awk '{print $16}'`
+  # plot s timeline bar with a dot at the epoch
+  # to plot time bar above map of Australia
+  #  psxy -JX16/0.25 -R2001.9/2020.01/1/2 -Ba4f2Nesw -O -K -Y+17.4 -X+1.3 -Sc0.3 -G255/0/0 << end >> $outfile
+  # to plot time bar between global map and the polar plots
+  gmt psxy -JX14/0.5 -R$time_bar_xmin/$time_bar_xmax/1/2 -Ba${time_bar_anot}Nesw -O -K -Y+14  -X-16.2. -Sc0.3 -G255/0/0 << end >> $outfile
+$epoch 1.5
+end
+endif
+
+if($convert == "Y" && orient == "P")then
+  echo convert $outfile `basename $fit_file`${ext}.jpg "&"
+  convert $outfile `basename $fit_file`${ext}.jpg &
+else if ($convert == "Y" && $orient != "P")then
+  echo Convert landscape image
+  echo convert $outfile `basename $fit_file`${ext}.jpg "&"
+  convert -rotate "90" $outfile `basename $fit_file`${ext}.jpg &
+endif
+
+if($plot == "Y")gs $outfile
+ 
+
+
+
+
+
+
+
+

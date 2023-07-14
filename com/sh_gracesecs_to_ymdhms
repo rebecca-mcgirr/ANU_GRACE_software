@@ -1,0 +1,25 @@
+#!/bin/csh -f
+
+# script to convert graceseconds to year/month/date/hr/min/sec
+#
+# P. Tregoning
+# 13 January 2022
+
+if ($#argv == 0)then
+  echo sh_gracesecs_to_ymdhms graceseconds
+  echo e.g. sh_gracesecs_to_ymdhms 1283263200
+  exit
+endif
+
+# set all time computations to being UTC, so that daylight savings time doesn't get included
+setenv TZ UTC
+
+# seconds since 1970-01-01 for GRACESECONDS=0
+set grace_zero = `date -d 2000-01-01T12:00:00 +%s`
+# seconds since 1970 for requested epoch
+set sec_since_1970 = `echo $1 $grace_zero | awk '{print $1 + $2 }'`
+
+# number of GRACESECONDS is just the difference
+set epoch = `date --date=@$sec_since_1970 --rfc-3339='seconds'`
+echo $epoch  Graceseconds $1 
+

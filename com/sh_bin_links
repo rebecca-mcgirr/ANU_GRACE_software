@@ -1,0 +1,37 @@
+#!/bin/csh -f
+
+# script to create all the required links in the bin directory for the ANU GRACE Analysis software (active installation)
+
+set version  = "~/gg/grace/active"
+
+cd $version ; mkdir bin >& /dev/null ; cd bin
+
+## GRACEORB ##
+ln -s ../graceorb/graceorb .
+
+## GRACEFIT ##
+ln -s ../gracefit/gracefit  .
+ln -s ../gracefit/gracesim  .
+ln -s ../gracefit/addnorm   .
+ln -s ../gracefit/fixnorm   .
+ln -s ../gracefit/gracediff .
+
+
+## tide netcdf generation program ##
+ln -s ../tide_mascons/tide_mascons .
+
+## Utility programs ##
+foreach file (grab_mascons extract_ocean_mascons regularize_mascons reshape_mascons separate_mascons reg_msc_by_lat range_accel convert_sphcoeff make_daily_AOD1B tidecdftoasc make_msc_constraint_v2 dist_flag which_mascon make_msc_constraint smooth beta_angle get_beta_angle decimate square_thrust_ACC1B decompose_kbrr  read_GTORB_record sphharm2xyz sphharm2mascon test_svd normeq_solve tidetoasc tide_to_accel mascon_tide_sph LS_rpy read_AOD1B pass_over_msc mascon_sizes configure_mascons voronoi_mascons srp_geometry_test2 add_srp_panel_acc sph_to_tide_grid )
+  ln -s ../util/$file .
+end
+
+## GRACE mission Level1B software ##
+ln -s ../Level1B_software/Bin2AsciiLevel1.e .
+
+ls -lrt
+
+echo "Links made in "$version/bin
+
+
+
+

@@ -1,0 +1,516 @@
+    Program spherical2mascon
+
+! Program:	spherical2mascon
+! Author:	Anthony Purcell
+! Date:		September 3, 2013
+! Description:	Program to convert from a spherical harmonic expansion of
+!		the gravity field into a series of mascon coefficients
+
+    implicit none
+
+    include '../includes/grace.param'
+    include '../includes/write_soln.h90'
+
+    integer*4, parameter:: max_deg      = 512      ! Max degree of spherical harmonic expansion
+    integer*4, parameter:: max_prime    = 5000     ! Max number of primary cells
+    integer*4, parameter:: max_tern     = 1500000  ! Max number of ternary cells
+    integer*4, parameter:: ppd_tern     = 6        ! Max number of ternary cells per degree
+    integer*4, parameter:: max_tern_lat = 1 + (180 * ppd_tern) ! Max number of ternary latitude steps
+
+      
+    real*8 apriori, area, bigG, colat, cos_coeff, del_colat, del_lon, grav, h_n, k_n, l_n, love_num_fact, lon, mass
+    real*8 mcon_area, mcon_coeff, mult_fact, pi,  r, radius, rad_fact, sin_coeff, soln, variance, VCV, x
+    real*8 fcn, zero
+    real*8,allocatable :: Pnm(:,:)
+
+    dimension cos_coeff(0:max_deg, 0:max_deg), mcon_coeff(max_prime),  mcon_area(max_prime)
+    dimension apriori(maxparm), soln(maxparm), VCV(maxparm, maxparm), k_n(5 * max_deg), sin_coeff(0:max_deg, 0:max_deg)
+
+
+    integer colatdeg, colatmin, count, degree, density, flag, i, icount, ioerr, izero, j, k, londeg, lonmin
+    integer m, mcon_count, num_mcons, mcon_index, n, num_primary, num_tern_lat
+    integer num_tern_long, pts_per_deg, m1, n1, n0, min_deg, deg_lim, deg_exp
+    integer lu_index, lu_grace, lu_out, lu_sphharm, lu_prime, lu_love
+
+    dimension density(max_prime), mcon_index(max_tern), num_tern_long(max_tern_lat)
+
+
+    character*200  mascon_index, mascon_primary, gracefit_file, sphharm_file, out_file
+    character*100  love_num_file
+    character arg*50, message*500, message2*256, version*2
+
+! ----------------------------- Read name of mascon index file from command line, if null output help -------------------------------
+! get the name of the mascon file from the command line
+    call getarg(1,mascon_index)
+
+    if ( mascon_index == " " ) then
+      write(6,10)
+10 format(/,'##############################################################################################' &
+   ,/,'                                  Program SPHHARM2MASCON                    ' &
+   ,/,'Purpose: Convert from spherical harmonics to an array of mascon multiples or vice versa' &
+   ,/,'Usage: sphharm2mascon mascon-index mascon-primary sphharm-file love_num_file  1 out-file gracefit-file' &
+   ,/,'Usage: sphharm2mascon mascon-index mascon-primary sphharm-file love_num_file -1   degree gracefit-file' &
+   ,/,'##############################################################################################')
+      stop
+    endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Set useful constant values used in the calculation -------------------------------------------------
+    pi            = 4.0d0 * datan(1.0d0)
+    rad_fact      = pi/1.80d2
+! PT160218: update this
+!    radius        = 6.3712d6
+    radius = 6.37813646d6
+    bigG          = 6.67384d-11
+    grav          = 9.80665d0
+    love_num_fact = 4.0d0 * pi * radius * bigG/grav
+    deg_lim       = max_deg
+    deg_exp       = max_deg
+    apriori       = 0.0d0
+    variance      = 0.1d0
+    zero          = 0.0d0
+    izero         = 0
+
+    lu_index   = 21
+    lu_sphharm = 22
+    lu_prime   = 23
+    lu_grace   = 24
+    lu_out     = 25
+    lu_love    = 26
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in mascon index file --------------------------------------------------------------------------
+    open(unit = lu_index, file = mascon_index, status = 'old', iostat = ioerr)
+    if(ioerr /= 0)then
+      write(message,'(a,a,a)')"Error opening input file ",mascon_index,". Does it exist?"
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,ioerr)
+    else
+      write(message,'(a,a)')"Reading ternary mascon file: ",mascon_index
+      call report_stat('STATUS','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+
+    read(lu_index,*) num_tern_lat, pts_per_deg
+    if ( num_tern_lat .gt. max_tern_lat ) then
+      write(message,'(a,2i6)')"Too many ternary mascon latitudes ", num_tern_lat, max_tern_lat
+      call report_stat('FATAL','GRACEORB','graceorb',' ',message,0)
+    endif
+
+    if ( pts_per_deg .gt. 0.0d0 ) then
+      del_colat = 1.0d0/dble(pts_per_deg)
+    else
+      del_colat = -dble(pts_per_deg)
+    endif
+    mcon_count = 0
+    num_mcons = 0
+
+    do i = 1, num_tern_lat
+      read(lu_index,*) num_tern_long(i)
+      do j = 1, num_tern_long(i)
+        mcon_count = mcon_count + 1
+        if ( mcon_count .gt. max_tern ) then
+          write(message,'(a,2i6)')"Too many ternary mascon cells ", mcon_count, max_tern
+          call report_stat('FATAL','GRACEORB','graceorb',' ',message,0)
+        endif
+        read(lu_index,*) mcon_index(mcon_count)
+        num_mcons = max(num_mcons, mcon_index(mcon_count))
+      enddo               ! End of j loop
+    enddo                 ! End of i loop
+    close(lu_index)
+
+    if ( num_mcons .gt. max_prime ) then
+      write(message,'(a,i6,a,i6,a)')"Too many mascons (",num_mcons,"). Max number: ",max_prime,"."
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+    else
+      write(message,'(a,i6)')"Number of primary mascons: ",num_mcons
+      call report_stat('STATUS','UTIL ','sphharm2mascon',' ',message,0)
+      write(message,'(a,i8)')"Number of ternary mascons: ",mcon_count
+      call report_stat('STATUS','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in mascon load density values from primary mascon file ----------------------------------------
+    call getarg(2,mascon_primary)
+    if ( mascon_primary .eq. " " ) then
+      write(message,'(a)')"Too few command line entries."
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+
+    open(lu_prime, file = mascon_primary, status = "old", iostat = ioerr)
+    if(ioerr /= 0)then
+      write(message,'(a,a,a)')"Error opening primary mascon input file ",mascon_primary,". Does it exist?"
+      call report_stat('FATAL','UTIL','sphharm2mascon',' ',message,0)
+    else
+      write(message,'(a,a,a)')"Reading primary mascon file ",mascon_primary,"."
+      call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+    endif
+
+    read(lu_prime,*) num_primary
+    if ( num_primary .ne. num_mcons ) then
+      write(message,'(a,i6,a,i6,a)')"Primary mascon file has incompatible mascon count: ",num_primary," vs. ",num_mcons,"."
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+    do k = 1, num_primary
+      read (lu_prime,*) colatdeg, colatmin, londeg, lonmin, r, area, density(k)
+    enddo                 ! End of k loop
+    close(lu_prime)
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in name of spherical harmonic coefficient file ------------------------------------------------
+    call getarg(3,sphharm_file)
+    if ( sphharm_file .eq. " " ) then
+      write(message,'(a)')"Too few command line entries."
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in load love number entries -------------------------------------------------------------------
+    call getarg(4,love_num_file)
+    if ( love_num_file .eq. " " ) then
+      write(message,'(a)')"Too few command line entries."
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+
+    open(unit = lu_love, file = love_num_file, status = "old", iostat = ioerr)
+    if(ioerr /= 0)then
+      write(message,'(a,a,a)')"Error opening elastic love number file ",love_num_file,". Does it exist?"
+      call report_stat('FATAL','UTIL','sphharm2mascon',' ',message,0)
+    else
+      write(message,'(a,a,a)')"Reading elastic love number file ",love_num_file,"."
+      call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+    endif
+
+    read(lu_love,*) version
+    read(lu_love,*) version
+    ioerr = 0
+    icount = 0
+    do while ( ioerr .eq. 0 )
+      icount = icount + 1
+      read(lu_love, *, end = 100, iostat = ioerr) n, h_n, l_n, k_n(n)
+      if ( icount .ne. n ) then
+        write(message,'(a,a,a,i4,a,i4)')"Error reading Love number file ", love_num_file,". At entry: ", icount, &
+                                           " not equal to label: ", n
+        call report_stat('FATAL','GRACEORB','graceorb',' ',message,ioerr)
+      endif
+    enddo                 ! End of ioerr while loop
+    if ( ioerr /= 0 ) then
+      write(message,'(a,a,a,i4)')"Error reading Love number file ", love_num_file,". At line: ", icount
+      call report_stat('FATAL','GRACEORB','graceorb',' ',message,ioerr)
+    endif
+100 close(lu_love)
+
+    if ( icount .gt. 5 * max_deg ) then
+      write(message,'(a,i6,a,i6,a)')"Love number file has incompatible maximum degree: ",icount," vs. ",5 * max_deg,"."
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+    endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in and verify flag value ----------------------------------------------------------------------
+    call getarg(5,arg)
+    read(arg,*) flag
+    if ( ( flag .ne. 1 ) .and. ( flag .ne. -1 ) ) then
+      write(message,'(a)')"Flag parameter must take value 1 or -1"
+      call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,ioerr)
+    endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+!***********************************************************************************************************************************
+! calculate spherical harmonic coefficients representing this set of mascon multiples
+    if ( flag .eq. -1 ) then
+      write(message,'(a)')"Converting from mascon entries to spherical harmonic coefients."
+      call report_stat('STATUS','UTIL ','sphharm2mascon',' ',message,0)
+
+! ----------------------------- Check that a valid spherical harmonic degree has been specified ------------------------------------
+      call getarg(6,arg)
+      read(arg,*) degree
+      if ( ( degree .gt. max_deg ) .or. ( degree .lt. 2 ) ) then
+        write(message,'(a,i6,a,i6,a)')"Max degree of harmonic expansion is invalid: ",degree,". Must lie between 2 and ",max_deg,"."
+        call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+      else
+        write(message,'(a,i6)')"Max. degree of desired spherical harmonic expansion: ",degree
+        call report_stat('STATUS','UTIL ','sphharm2mascon',' ',message,0)
+      endif
+
+      allocate(Pnm(0:degree,0:degree))
+
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in mascon multiples from a gracefit style input file ------------------------------------------
+      call getarg(7,arg)
+      read(arg,*) gracefit_file
+      if ( gracefit_file .eq. " " ) then
+        write(message,'(a)')"Too few command line entries."
+        call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+      endif
+
+      open(lu_grace, file = gracefit_file, status = "old",iostat=ioerr)
+      if(ioerr /= 0)then
+        write(message,'(a,a,a)')"Error opening gracefit-style input file ",gracefit_file,". Does it exist?"
+        call report_stat('FATAL','UTIL','sphharm2mascon',' ',message,0)
+      endif
+
+      version = " "
+      read(lu_grace,'(a)') version(1:2)
+      if ( version(1:2) .eq. "V2" ) then
+        call read_soln_v2('sphharm2mascon', lu_grace, apriori, soln, VCV,0)
+      else
+        call read_soln_v1(lu_grace, apriori, soln, VCV,0)
+      endif
+      close(31)
+
+      write(message,'(a,a)') "Using mascon values from gracefit apriori file : ", gracefit_file
+      call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+
+      do i = 1, num_mcons
+        mcon_coeff(i) = soln(30 + i)
+      enddo               ! End of i loop
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Calculate integrals of spherical harmonics with mascon elements ------------------------------------
+      write(message,'(a)') "Integrating mascon heights to produce spherical harmonic coeeficients."
+      call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+
+      count = 0
+      cos_coeff = 0.0d0
+      sin_coeff = 0.0d0
+
+      do i = 1, num_tern_lat
+        colat = (dble(i - 1) * del_colat) * rad_fact
+        x = dcos(colat)
+        call pnm_calc(x, Pnm, degree, deg_lim, 0)
+
+        if ( ( i .eq. 1 ) .or. ( i .eq. num_tern_lat ) ) then
+          area = 2.0d0 * pi * (1.0d0 - dcos(del_colat))
+        else
+          del_lon = (3.60d2/dble(num_tern_long(i))) * rad_fact
+          area = del_colat * dsin(colat) * del_lon
+        endif
+
+        do j = 1, num_tern_long(i)
+          lon = dble(j - 1) * del_lon
+          count = count + 1
+          k = mcon_index(count)
+          mass = area * mcon_coeff(k) * dble(density(k))
+          do n = 1, degree
+            cos_coeff(n,0) = cos_coeff(n,0) + mass * Pnm(n,0)
+            do m = 1, n
+              cos_coeff(n,m) = cos_coeff(n,m) + Pnm(n,m) * dcos(dble(m) * lon) * mass
+              sin_coeff(n,m) = sin_coeff(n,m) + Pnm(n,m) * dsin(dble(m) * lon) * mass
+            enddo         ! End of m loop
+          enddo           ! End of n loop
+        enddo             ! End of j loop
+      enddo               ! End of i loop
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Apply love no. multiplicative factor to convert from mass to potential -----------------------------
+      do n = 1, degree 
+        mult_fact = (love_num_fact * (1 + k_n(n)))/(radius * dble(2*n + 1))
+        cos_coeff(n,0) = cos_coeff(n,0) * mult_fact
+        do m = 1, n
+          cos_coeff(n,m) = cos_coeff(n,m) * mult_fact
+          sin_coeff(n,m) = sin_coeff(n,m) * mult_fact
+        enddo             ! End of m loop
+      enddo               ! End of n loop
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Output spherical harmonic coefficients -------------------------------------------------------------
+      write(message,'(a,a,a)') "Writing spherical harmonic coefficients to file: ", sphharm_file, "."
+      call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+      open(lu_sphharm, file=sphharm_file)
+      do n = 1, degree
+        write(22, *) n, izero, cos_coeff(n, 0)
+        do m = 1, n
+          write(lu_sphharm, *) n, m, cos_coeff(n, m), sin_coeff(n, m)
+        enddo             ! End of m loop
+      enddo               ! End of n loop
+      close(lu_sphharm)
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+    endif
+!***********************************************************************************************************************************
+
+!***********************************************************************************************************************************
+! Convert ifrom spherical harmonic coefficients of gravitational potential to mascon coefficients
+    if ( flag .eq. 1 ) then
+      write(message,'(a)')"Converting from spherical harmonic coefients to mascon coefficients."
+      call report_stat('STATUS','UTIL ','sphharm2mascon',' ',message,0)
+
+! ----------------------------- Read in name of output file ------------------------------------------------------------------------
+      call getarg(6,arg)
+      read(arg,*) out_file
+      if ( out_file .eq. " " ) then
+        write(message,'(a)')"Too few command line entries."
+        call report_stat('FATAL','UTIL ','sphharm2mascon',' ',message,0)
+      endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Read in file of spherical harmonic coefficients ----------------------------------------------------
+      call read_sphharm(lu_sphharm, sphharm_file, deg_lim, deg_exp, min_deg, degree, cos_coeff, sin_coeff)
+      allocate(Pnm(0:degree,0:degree))
+      Pnm = 0.0
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Apply inverse love number multiplicative factors to convert from potential to mass -----------------
+! Degree 0 - In most cases we are analysing perturbations from an average field. In which case the degree 0 term is by definition zero.
+!            In any case k_n(0) is not well defined.
+! Degree 1 - Working in the Centre of Mass reference frame the degree one term does not produce a change in the gravity field since
+!            overall mass is conserved. This has the effect that (1 + k_n(1)) = 0 so the term below becomes singular and is neglected.
+      do n = 2, degree
+        mult_fact = radius * dble(2*n + 1)/(love_num_fact * (1 + k_n(n)))
+        cos_coeff(n,0) = cos_coeff(n,0) * mult_fact
+        do m = 1, n
+          cos_coeff(n,m) = cos_coeff(n,m) * mult_fact
+          sin_coeff(n,m) = sin_coeff(n,m) * mult_fact
+        enddo             ! End of m loop
+      enddo               ! End of n loop
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Calculate integrals of  spherical harmonics with mascon elements -----------------------------------
+! We have a series of non-overlapping regions R_i. We define corresponding functions F_i such that:
+! F_i(x) = 1 if x is in R_i, otherwise F_i(x) = 0
+! The functions F_i are orthogonal: integral(globe, F_i * F_j) = 0 if i != j
+! Given a function f, we can construct a corresponding approximation of f: f = sum(i = 1, N) f_i F_i(x)
+! then using orthogonality and employing least squares we get:
+! f_i = integral(R_i, f)/integral(R_i, 1) = integral(R_i, f)/area(R_i)
+
+      write(message,'(a)') "Integrating spherical harmonic function to produce mascon coeeficients."
+      call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+
+      count = 0
+      mcon_coeff = 0.0d0
+      mcon_area = 0.0d0
+
+      do i = 1, num_tern_lat
+        colat = (dble(i - 1) * del_colat) * rad_fact
+        x = dcos(colat)
+!print*,'calling pnm_calc x,degree,deg_lim',x,degree,deg_lim
+!print*,'pnm:',pnm
+!print*,'calling now ...'
+!        call pnm_calc(x, Pnm, degree, deg_lim, 0)
+        call legendre_matrix(degree,x, Pnm)
+!print*,'x,Pnm(0:2,0:2),degree,deg_lim',x,Pnm(0:2,0:2),degree,deg_lim,del_colat,colat
+        if ( ( i .eq. 1 ) .or. ( i .eq. num_tern_lat ) ) then
+          area = 2.0d0 * pi * (1.0d0 - dcos(del_colat))
+        else
+          del_lon = (3.60d2/dble(num_tern_long(i))) * rad_fact
+          area = del_colat * dsin(colat) * del_lon
+        endif
+
+        do j = 1, num_tern_long(i)
+          lon = dble(j - 1) * del_lon
+          count = count + 1
+          k = mcon_index(count)
+
+          fcn = 0.0d0
+          do n = 2, degree
+            fcn = fcn + cos_coeff(n,0) * Pnm(n,0)
+            mcon_coeff(k) = mcon_coeff(k) + area * cos_coeff(n,0) * Pnm(n,0)
+            do m = 1, n
+              fcn = fcn + cos_coeff(n,m) * Pnm(n,m) * dcos(dble(m) * lon)
+              fcn = fcn + sin_coeff(n,m) * Pnm(n,m) * dsin(dble(m) * lon)
+            enddo         ! End of m loop
+          enddo           ! End of n loop
+          mcon_coeff(k) = mcon_coeff(k) + area * fcn
+          mcon_area(k)  = mcon_area(k)  + area
+
+          if ( mod(count, 10000) .eq. 0 ) then
+            write(message,'(a, i8)') "Integrating ternary mascon cell: ", count
+            call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+!print*,'count,mcon_coeff(k)',count,mcon_coeff(k),cos_coeff(2,0),area,pnm(2,0),x
+!write(*,'(a,e18.9)')"Pnm(2,0)",Pnm(2,0)
+          endif
+
+        enddo             ! End of j loop
+      enddo               ! End of i loop
+! ----------------------------------------------------------------------------------------------------------------------------------
+
+! ----------------------------- Write output ---------------------------------------------------------------------------------------
+      call getarg(7, gracefit_file)
+
+      ioerr = 0
+      if ( gracefit_file .ne. " " ) then
+        open(unit = lu_grace, file = gracefit_file, status = 'old', iostat = ioerr)
+      else
+        ioerr = 1
+      endif
+
+      if ( ioerr /= 0 ) then
+
+! +++++++++++++++++++++ gracefit file does not exist, write output in gracefit style format to out_file +++++++++++++++++++++++++++
+        write(message,'(a,a)') "Writing mascon coefficients to output file: ", out_file
+        call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+
+        open(unit=lu_out, file = out_file)
+        write(lu_out,*) num_mcons
+        do k = 1, num_mcons
+          write(prmnam(k),'(i5,a,i4.4,a,a4,a)') 30 + k,'. MC',k,' (Gt)'
+          mcon_coeff(k) = mcon_coeff(k)/(mcon_area(k) * dble(density(k)))
+          write(lu_out,'(a30,f19.5,f14.5,f17.5,f17.5)')prmnam(k),zero,mcon_coeff(k),variance
+        enddo             ! End of k loop
+        close(lu_out)
+! ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+      else
+
+! +++++++++++++++++++++ Read in gracefit file & replace mascon solution values w/ calculated coefficients +++++++++++++++++++++++++
+        do i=1, 3
+          read (lu_grace, '(a)') message
+          write(  lu_out, '(a)') message
+        enddo             ! End of i loop
+
+        read (lu_grace, '(a)') message
+        write(  lu_out, '(a)') message
+        read(message, '(32x,i15)') nparam
+        write(message,'(a,i6)')'number of parameters' , nparam
+        if ( nparam .ne. num_mcons + 30 ) then
+          write(message,'(a,a,a,i4,a,i4,a)') "Error reading file ", gracefit_file, ", unexpected value for nparam: ",nparam, &
+                                             " (expecting 30 + ",num_mcons,")."
+          call report_stat('FATAL','UTIL','sphharm2mascon',' ',message,0)
+        endif
+        call report_stat('STATUS','SPHARM2MASCON','sphharm2mascon',' ',message,0)
+
+       do while ( message2(2:10) .ne. "PARAMETER" )
+         read (lu_grace, '(a)', end = 1000) message2
+         write(  lu_out, '(a)') message2
+         if ( message2(2:10) .eq. "PARAMETER" ) then
+           do i = 1, 30
+             read (lu_grace, '(a30, f17.7, f17.7, f17.7)') prmnam(i), apriori(i), soln(i), VCV(i,i)
+             write(  lu_out, '(a30, f17.7, f17.7, f17.7)') prmnam(i), apriori(i), soln(i), VCV(i,i)
+           enddo           ! End of i loop
+           do k = 1, num_mcons
+             mcon_coeff(k) = mcon_coeff(k)/mcon_area(k)       
+             read (lu_grace, '(a30, f17.7, f17.7, f17.7)') prmnam(k), apriori(k),       soln(k), VCV(k,k)
+             write(  lu_out, '(a30, f17.7, f17.7, f17.7)') prmnam(k), apriori(k), mcon_coeff(k), VCV(k,k)
+           enddo           ! End of k loop
+         endif
+       enddo
+
+       do while ( message2(3:5) .ne. "VCV" )
+         read (lu_grace, '(a)', end = 1001) message2
+         write(  lu_out, '(a)') message2
+         if ( message2(3:5) .eq. "VCV" ) then
+           do i = 1, nparam
+             read (lu_grace, *) (VCV(i, j), j = 1, nparam)
+             write(  lu_out, *) (VCV(i, j), j = 1, nparam)
+           enddo           ! End of i loop
+         endif
+       enddo
+       close(lu_grace)
+       close(lu_out)
+! ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+      endif
+    endif
+! ----------------------------------------------------------------------------------------------------------------------------------
+!***********************************************************************************************************************************
+
+    write(message,'(a)')'Program terminating normally'
+    call report_stat('STATUS','UTIL','sphharm2mascon',' ',message,0)
+    stop
+
+1000 write(message,'(a)')'Error reading VCV file. Line "SOLUTION A PRIORI" not found'
+     call report_stat('FATAL','UTIL','sphharm2mascon',' ',message,0)
+1001 write(message,'(a)')'Error reading VCV file. Line "SOLUTION VCV" not found'
+     call report_stat('FATAL','UTIL','sphharm2mascon',' ',message,0)
+
+    stop
+    end

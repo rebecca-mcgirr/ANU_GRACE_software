@@ -1,0 +1,59 @@
+#!/bin/csh -f
+
+# script to download a single day of AOD1B data from GFZ and add it to the tarfile
+#
+# P. Tregoning
+# 2 July 2019
+
+if ($#argv == 0 ) then
+  echo "sh_get_AOD1B YYYY MM DD RL06"
+  exit
+endif
+
+set year = $1
+set month = $2
+set day = $3
+set RL = $4
+set RL_num = `echo $RL | cut -c3-4`
+
+# make the file name
+set wget_file = `echo $year $month $day $RL_num | awk '{printf "ftp://isdcftp.gfz-potsdam.de/grace-fo/Level-1B/GFZ/AOD/RL%2.2d/%4d/AOD1B_%4d-%2.2d-%2.2d_X_%2.2d.asc.gz\n",$4, $1, $1, $2, $3, $4}'`
+
+set file = `echo $year $month $day $RL_num | awk '{printf "AOD1B_%4d-%2.2d-%2.2d_X_%2.2d.asc\n", $1, $2, $3, $4}'`
+
+# use wget to get the file
+if(! -e ${file}.gz) wget $wget_file
+gunzip ${file}.gz
+
+# PT220210: replace the appending of the file and just tar up all available files in the directory
+tar cvf AOD1B_${year}-${month}_${RL_num}.tar AOD1B_${year}-${month}-??_X_??.asc
+# gzip it
+gzip AOD1B_${year}-${month}_${RL_num}.tar ; mv AOD1B_${year}-${month}_${RL_num}.tar.gz AOD1B_${year}-${month}_${RL_num}.tgz
+
+echo "tar -tvf"  AOD1B_${year}-${month}_${RL_num}.tgz
+tar -tvf AOD1B_${year}-${month}_${RL_num}.tgz
+
+
+exit
+
+
+
+
+# Below is the original way of doing this. It fails to create the correct listing within the tar file if one day is missed in the downloading process.
+# The new method above will account for it all correctly.
+
+# check whether a tar file exists for this month already
+if (-e AOD1B_${year}-${month}_${RL_num}.tgz)then
+  gunzip AOD1B_${year}-${month}_${RL_num}.tgz
+  # append to the tar file
+  tar -f AOD1B_${year}-${month}_${RL_num}.tar -r $file
+  # gzip it
+  gzip AOD1B_${year}-${month}_${RL_num}.tar ; mv AOD1B_${year}-${month}_${RL_num}.tar.gz AOD1B_${year}-${month}_${RL_num}.tgz
+else
+  tar -cvf AOD1B_${year}-${month}_${RL_num}.tar $file
+  # gzip it
+  gzip AOD1B_${year}-${month}_${RL_num}.tar ; mv AOD1B_${year}-${month}_${RL_num}.tar.gz AOD1B_${year}-${month}_${RL_num}.tgz
+endif
+
+echo "tar -tvf"  AOD1B_${year}-${month}_${RL_num}.tgz
+tar -tvf AOD1B_${year}-${month}_${RL_num}.tgz

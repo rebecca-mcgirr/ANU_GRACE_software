@@ -1,0 +1,19 @@
+!   output.h90 --  common variables for output
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!     File unit numbers
+
+    integer*4, parameter               :: LURMS =  801            ! .rms file unit number
+    integer*4, parameter               :: LUFIT =  802            ! .fit file unit number
+    integer*4, parameter               :: LUSVS =  803            ! .svs file unit number
+    integer*4, parameter               :: LUVCV =  804            ! .vcv file unit number
+    integer*4, parameter               :: LUNORM = 805            ! .norm file unit number
+    integer*4, parameter               :: LUCOR =  806            ! correlation file unit number
+    integer*4, parameter               :: LUJPL =  807            ! JPL kbrr resid file unit number
+    integer*4, parameter               :: LUGN_KB = 700           ! GNV1B residual plot file unit numbers
+    integer*4, parameter               :: LUGN_KBA = 701           ! GNV1B residual plot file unit numbers
+    integer*4, parameter, dimension(2) :: LUGN_PLT = [500, 501]   ! GNV1B residual plot file unit numbers
+    integer*4, parameter               :: LUAMAT = 808
+    integer*4, parameter               :: LUBVEC = 809
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+

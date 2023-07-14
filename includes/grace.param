@@ -1,0 +1,108 @@
+!   gracefit.param --  common parameters for gracefit
+
+!   Dimensions
+           
+!   maximum number of satellites
+    integer :: maxsat
+    parameter (maxsat = 2)
+          
+!   maximum number of orbit parameters to estimate
+    integer :: maxorb
+    parameter (maxorb = 12)
+
+!   maximum number of GPS antenna offsets
+    integer :: maxgpsantoff
+    parameter (maxgpsantoff = 3)
+
+!     maximum number of accelerometer parameters
+    integer :: maxacc
+    parameter (maxacc = 12)
+                
+!   maximum number of global parameters
+    integer :: maxglb
+    parameter (maxglb = 9)
+
+!   maximum number of tabular orbit files allowed (1 per satellite)
+    integer :: maxtfil
+    parameter (maxtfil = 2)
+
+!     maximum epoch to process
+    integer*4 :: maxepc
+!   Currently set for 5.555 hours @ 5 Hz = 4000 epochs
+!    parameter  (maxepc = 86400)
+!    parameter  (maxepc = 64800)
+!    parameter  (maxepc = 43300)
+!    parameter  (maxepc = 17290)  ! 17280 for 24 hours
+    parameter  (maxepc = 8660)  ! 8660 for 12 hours
+!    parameter  (maxepc = 5800 )
+!    parameter  (maxepc = 2890)
+!    parameter  (maxepc = 1500 )
+
+! PT130516: an array of the epochs (in grace seconds)
+    integer*4 epochs(maxepc)
+    common /grace_epochs/ epochs
+
+!   maximum number of mascons to estimate (12 degree grid = 30 x 15 = 450)
+    integer*4 :: maxmcs
+! PT181203: for 1deg mascons on land we need 18541 parameters. It's an algorithm, but it is 4000
+!           too small within graceorb. So increase from 4600 to 8600
+!    parameter  (maxmcs = 4600)
+    parameter  (maxmcs = 8600)
+!   parameter  (maxmcs = 2870)
+
+! PT130528: 3 x GPS antenna offset parameters per satellite
+    integer*4  max_gps_ant_off
+    parameter  (max_gps_ant_off = 6 )
+
+! PT150903: maximum tidal amplitudes
+    integer*4  max_tid_ampl
+    parameter  (max_tid_ampl = 5 * 2 * 1000)
+
+! PT19-312: move all this to mod_subs/soln_mod.f90
+!!   maximum parameters to extimate (global parameter + satellite IC parameters + mascons + gps_antenna_offsets )
+!    integer*4 :: maxparm
+!! PT181204: just hardwire it to 20000 for now ...
+!!    parameter  (maxparm=maxglb+maxorb*maxsat+maxmcs+max_gps_ant_off + max_tid_ampl)
+!!    parameter  (maxparm=20000)
+!! RM190312: just hardwire it to 48000 for now (causes seg fault)
+!    parameter  (maxparm=48000)
+
+!   maximum number of satellite position/vel observation types
+    integer*4 :: maxgnobs
+    parameter  (maxgnobs = 6)
+
+!   maximum number of inter satellite range observations types
+    integer*4 :: maxkbobs
+    parameter  (maxkbobs = 3)
+
+!   maximum number of accelerometer observations types
+    integer*4 :: maxacobs
+    parameter  (maxacobs = 3)
+
+! PT130621: maximum number of conditional equations. At this stage, we allow two
+!  1.  that the y non-gravitational acceleration is zero during eclipse
+!  2.  that the mean z non-gravitational acceleration is slightly negative (ie ~ -10 nm/s^2 based on earth albedo signal only)
+    integer*4 :: maxcondobs
+    parameter   (maxcondobs = 2*maxsat)
+
+! PT130621: conditional equations related to CoM parameters (3 x pos, 3 x vel per satellite)
+    integer*4 :: maxCoMobs
+    parameter   (maxCoMobs = 6*maxsat)
+
+!   maximum number of observation types
+! PT130301: increase as part of the change of making the "part" array 3D rather than 4D
+    integer*4 :: maxobs_t
+    parameter  (maxobs_t = maxsat*maxgnobs + maxkbobs + maxCoMobs + maxcondobs + maxacobs)
+
+!   maximum satellite position/velocity + partial derivatives vector
+!   max obs types [6] + max orb partials [12*6 = 72] + max mc partials [450*6 = 2700] = 2778
+    integer*4 :: maxrvec
+    parameter (maxrvec = maxgnobs + maxorb*maxgnobs + maxmcs*maxgnobs)
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! number of parameters
+     integer*4 :: nparam
+     common /num_parameters/ nparam
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+

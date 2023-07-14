@@ -1,0 +1,11 @@
+#!/bin/csh -f
+
+# a list of the python scripts related to GRACE processing
+# 
+# File commenced 5 February 2020
+
+echo "~/gt/util/pycodes/get_rms_and_lowpass_values.py /scratch/compute1/pault/grace/raijin_results/fft/" '"*/*batch5z_zeroapr_tikh400.fit" myfile.txt'
+echo "~/gt/util/pycodes/plot_ts_filtered.py [fitfile-dir] [pattern] [lat] [lon]"
+
+cat ~/gt/util/pycodes/pycodes_mods
+

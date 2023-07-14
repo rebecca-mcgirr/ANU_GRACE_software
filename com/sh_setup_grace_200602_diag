@@ -1,0 +1,560 @@
+#!/bin/csh -f
+
+# Script to set up the files required for the processing of a single day of space gravity data. 
+# The script will run for either GRACE or GRACE FO data, with a command line option available to 
+# over-ride the default values of:
+# 
+# pre:2018  : GRACE
+# post:2017 : GRACE FO
+#
+# The compliance of this script with GRACE FO data has been tested against the JPL test data set,
+# which is for May 2008. There is no other time when GRACE and GRACE FO data would ever overlap!
+#
+# This script has been modified from the bash script sh_graceorb_paul (written by Tony, modified by many others)
+#
+# P. Tregoning
+# 29 May 2018
+#
+# MODS
+#  
+# PT190807: change -acc_extend to just -extend, so that it extends the KBR data as well
+# HM200602: change call to apriori_mascons to use new model
+
+if ($#argv == 0)then
+
+    echo "sh_setup_grace   is a csh script to set up the files for processing GRACE/GRACE FO data"
+
+    echo "Usage: sh_setup_grace   -t <year> <month> <day> <hr> <min> <sec> <duration> [ -type <h5/bin> -version ~/ga ~/gt -mission 0/1/2 -extend epochs -acc_model none fft none -mascon_file <mascon_file> -msc_apriori_model <msc_model_file> ]"
+
+    echo "where      -t         specify the year, month, day, hour, min, sec of start time and"
+    echo "                      duration of integration *in seconds* (not the number of steps)"
+
+    echo "           -version    version of software to use (i.e. ~/ga or ~/gt)"
+    echo "           -type       either h5 or bin orbit files"
+    echo "           -mission    0: GRACE, 1: GRACE FO, 2: GRACE II"
+    echo "           -extend number of epochs to extend data (i.e. 21600) of ACC/ACT and KBR"
+    echo "           -mascon_file : changes the mascon file to a non-default value (e.g. /scratch/compute1/pault/blah/mascons_stage4 )"
+    echo "           -msc_apriori_model : name of file containing polynomial fit to timeseries of each mascon (e.g. msc_apriori_quadratic.model)"
+  exit
+endif
+
+# echo command line
+echo "CMD: " $0 $*
+
+# Add links necessary to setup a new day:
+ln -s ~/gg/grace/tables/def_grav.dat . >& /dev/null
+ln -s ~/gg/grace/tables/usno.finals.data . >& /dev/null
+ln -s ~/gg/grace/tables/desaicoeff . >& /dev/null
+#ln -s ~/gg/grace/tables/mascons_stage4_350km_700km_0.2_0.1_0.5.reg . >& /dev/null
+#ln -s ~/gg/grace/tables/mascons_stage4_350km_700km_0.5_0.1_0.5_0.1.reg . >& /dev/null
+ln -s ~/gg/grace/tables/atm_tide_stokes.hs . >& /dev/null
+ln -s ~/gg/grace/tables/GOCE.deg200 . >& /dev/null
+
+# PT180622: link an IC file from the gg/grace/tables directory
+ln -s ~/gg/grace/tables/GRACE_IC.dat . >& /dev/null
+
+ln -s ~/gg/grace/tables/JPLEPH  . >& /dev/null
+
+###### Default values ########
+set setup_cmdfile = "GRACE.input"
+set version = ~/gt
+set gtorb_type = "h5"
+set mission = 0
+set RL_num = 02
+set extend = 0
+set acc_model = (none fft none)
+set mascon_surface = "ellipsoid"
+set mascon_file = ""
+set msc_model_file = "ZAP"
+set msc_model_basis = "mascons_stage5_V004"
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -t:
+      set year = $input[2] ; shift argv  
+      set month = $input[3] ; shift argv
+      set day   = $input[4] ; shift argv
+      set hr    = $input[5] ; shift argv
+      set min   = $input[6] ; shift argv
+      set sec   = $input[7] ; shift argv
+      set durn  = $input[8] ; shift argv
+      echo Requested integration: $year $month $day $hr $min $sec $durn
+    breaksw
+    case -v*:
+      set version = $input[2] ; shift argv
+    breaksw
+    case -type:
+      set gtorb_type = $input[2] ; shift argv
+    breaksw
+    case -extend:
+      set extend = $input[2] ; shift argv
+    breaksw
+    case -mission:
+      set mission = $input[2] ; shift argv
+      if($mission == 1)set setup_cmdfile = "GRACE_FO.input"
+      if($mission == 1)set RL_num = "04"
+    breaksw
+    case -RL:
+      set RL_num = $input[2] ; shift argv
+    breaksw
+    case -acc_model:
+      set acc_model[1] = $input[2] ; shift argv  
+      set acc_model[2] = $input[3] ; shift argv
+      set acc_model[3]   = $input[4] ; shift argv
+    breaksw
+    case -mascon_surface:
+      set mascon_surface = $input[2] ; shift argv
+    breaksw
+    case -mascon_file:
+      set mascon_file = $input[2] ; shift argv
+    breaksw
+    case -msc_apriori_model:
+      set msc_model_file = $input[2] ; shift argv
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+echo "++++++++SETUP+++++++++"
+echo Completed decoding command line inputs
+echo version = $version
+
+# PT131028: define the suffix of just the date
+set suffix_date = ${year}-${month}-${day}
+set suffix_nextdate = `date -d "${suffix_date} 1 days" +%Y-%m-%d`
+set suffix_prevdate = `date -d "${suffix_date} -1 days" +%Y-%m-%d`
+
+set RL = `echo $RL_num | awk  '{printf "RL%2s", $1}'`
+
+# copy in the default setup file
+if ($mission == 0)then
+  cp    ~/gg/grace/templates/GRACE.input.template GRACE.input
+else if ($mission == 1) then
+  cp    ~/gg/grace/templates/GRACE_FO.input.template GRACE_FO.input 
+endif
+
+######################################################
+#  read in relevant information from setup input file
+######################################################
+set static_field = `grep MOD_STATIC_FIELD $setup_cmdfile | awk '{print $3}'`
+set ocean_tide = `grep MOD_OCEAN_TIDE     $setup_cmdfile | awk '{print $3}'`
+set atm_tide = `grep MOD_ATM_TIDE         $setup_cmdfile | awk '{print $3}'`
+set dealias = `grep MOD_DEALIAS           $setup_cmdfile | awk '{print $3}'`
+set tim = `grep INT_TIME_INTERVAL         $setup_cmdfile | awk '{print $3}'`
+# PT121101: get the mascon, dealias and data directores from the GRACE input file rather than users editing this scrit
+set datadir = `grep DATA_DIR              $setup_cmdfile | awk '{print $3}'`
+set mascon_dir = `grep MASCON_DIR         $setup_cmdfile | awk '{print $3}'`
+set dealias_dir = `grep DEALIAS_DIR       $setup_cmdfile | awk '{print $3}'`
+echo "     Integration step size is: $tim seconds"
+
+# PT190225: create either a default name for the mascons or use the user-entered value
+if($mascon_file == "")then
+  set mascon_file = `echo $mascon_dir "mascons_stage4" | awk '{printf "%s/%s", $1, $2}'`
+endif
+
+#  Copy the relevant tables from GAMIT tables directory
+${version}/com/sh_GRACE.table.links -frame J2000 -year $year -eop usno ut1 pole >& /dev/null
+
+# calculate the number of integration steps   
+set steps = `echo $durn $tim | awk '{print $1 / $2}'`
+echo "     The total number of integration steps is : "$steps  
+
+#  call doy and get it to return GRACE seconds for adjusted start date/time
+set strt = `doy $year $month $day $hr $min | grep GRACE | awk '{print int($6 + '$sec')}'`
+echo "Integration start time: $strt"
+
+###########################
+#### get Level-1B data ####
+###########################
+
+set record_dir = $datadir/${RL}/${year}
+set suff = ${year}-${month}-${day}_${RL_num}
+set suff_FO = ${year}-${month}-${day}_RL${RL_num}
+if ($mission == 0)set record_tar = $record_dir/grace_1B_${suff}.tar.gz
+if ($mission == 1)set record_tar = $record_dir/gracefo_1B_${suff_FO}.ascii.noLRI.tgz
+if ( -e $record_tar )then
+  echo "untarring data files..."
+  tar -xvf $record_tar > tar.txt
+  rm tar.txt
+  echo "untarred file:" $record_tar
+else
+  echo Input Level-1B data file does not exist: $record_tar    
+  echo sh_setup_grace halted.
+  exit
+endif
+
+
+#####################################
+#### create a priori mascon file ####
+#####################################
+if($msc_model_file != "ZAP")then
+  ln -s ~/gg/grace/tables/$msc_model_file .   >& /dev/null
+  ln -s ~/gg/grace/tables/$msc_model_basis . >& /dev/null
+  # PT/HMcQ191002: change to using the 15th day of the month, irrespective of what day is being processed
+  # HM200602: new apriori model format, using bitmap=1
+  ${version}/util/apriori_mascons $msc_model_basis $msc_model_file $year $month 15  $mascon_file  1
+endif
+
+########################
+#### Satellite Loop ####
+########################
+if ($mission == 0)then
+  set sats = (A B)
+  set prefix_orb = "GRACE__"
+  set gps_suffix = "asc"
+else if ($mission == 1)then
+  set sats = (C D)
+  set prefix_orb = "GRACEFO"
+  set gps_suffix = "txt"
+endif
+
+foreach sat ($sats)
+  echo "Checking Initial Conditions for satellite: " $sat
+  set suffix = ${year}-${month}-${day}_${sat}_${RL_num}
+  set GPS_file = GNV1B_${suffix}
+  set KBR_file = KBR1B_${year}-${month}-${day}_X_${RL_num}
+
+  if ($mission == 0 && -e ${GPS_file}.dat)then
+# convert GPS data file to ascii format
+     echo ${GPS_file}.dat found
+# PT180606: convert GRACE data to ascii. GRACE FO will be ascii already
+    Bin2AsciiLevel1.e -binfile ${GPS_file}.dat  -ascfile ${GPS_file}.asc
+  else if ($mission == 0 && ! -e ${GPS_file}.dat)then
+     echo GRACE Input Level-1B data file does not exist: ${GPS_file}.dat $mission
+     echo GRACE Input Level-1B data file does not exist: ${GPS_file}.dat > setup.FATAL
+     exit
+  else if ($mission == 1 && -e ${GPS_file}.${gps_suffix} )then
+       echo ${GPS_file}.${gps_suffix} found
+  else if ($mission == 1 && ! -e ${GPS_file}.${gps_suffix} )then
+       echo GRACE FO Input Level-1B data file does not exist: ${GPS_file}.${gps_suffix}
+       echo GRACE FO Input Level-1B data file does not exist: ${GPS_file}.${gps_suffix} > setup.FATAL
+       exit
+  endif
+    
+
+# Extract the ICs from the GPS data file 
+
+# check that the integration start time has a corresponding entry in the GPS data file
+# if not then we will have to integrate from an earlier time step up to the integration
+# start time to obtain ICs
+  set ICtest = `grep -h "^${strt}" ${GPS_file}."${gps_suffix}" | wc -l`
+  if ( $ICtest == 0 ) then
+           echo "FATAL: Start time ${strt} not found in GPS file ${GPS_file}."${gps_suffix}
+           echo "FATAL: Start time ${strt} not found in GPS file ${GPS_file}."${gps_suffix} > setup.FATAL
+           exit
+  else
+    # PT190724: change in header info for GRACE FO means we need to exclude something to get this to work
+    set ICarray = `grep ${strt} ${GPS_file}."${gps_suffix}" | grep -v start_time_epoch_secs | awk '{print $1, $4, $5, $6, $10, $11, $12}'`
+    echo "GRACE ${sat} ICS (m and mm/yr): "${ICarray} 
+
+  endif
+
+#  write information IC file required by ORBIT software
+  set tmp_hrmin_string =  `doy ${strt}g | grep Date | awk '{printf "%2.2d %2.2d\n", substr($0,17,2), substr($0,20,2) }'` 
+  set hr_str = `echo ${tmp_hrmin_string} | awk '{print $1}'`
+
+  echo ${ICarray[1]}                 | awk '{printf"%-17d \n",$1}'       >  ICS_${suffix_date}_${hr_str}.${sat} # GRACE time
+  echo ${ICarray[2]}                 | awk '{printf"%-18.10f \n",$1}' >> ICS_${suffix_date}_${hr_str}.${sat} # Position ICs 1-3 (terrestrial)
+  echo ${ICarray[3]}                 | awk '{printf"%-18.10f \n",$1}' >> ICS_${suffix_date}_${hr_str}.${sat}
+  echo ${ICarray[4]}                 | awk '{printf"%-18.10f \n",$1}' >> ICS_${suffix_date}_${hr_str}.${sat}
+  echo ${ICarray[5]}                 | awk '{printf"%-18.12f \n",$1}' >> ICS_${suffix_date}_${hr_str}.${sat} # Velocity ICs 1-3 (terrestrial)
+  echo ${ICarray[6]}                 | awk '{printf"%-18.12f \n",$1}' >> ICS_${suffix_date}_${hr_str}.${sat}
+  echo ${ICarray[7]}                 | awk '{printf"%-18.12f \n",$1}' >> ICS_${suffix_date}_${hr_str}.${sat}
+  echo $steps >> ICS_${suffix_date}_${hr_str}.${sat}      # Number of time steps in integration
+  echo $sat >> ICS_${suffix_date}_${hr_str}.${sat}          # Satellite name (A or B for GRACE, C or D for GRACE FO)
+  echo $RL | awk '{print substr($1,3,2)}' >> ICS_${suffix_date}_${hr_str}.${sat} # Level 1 data release (RL00 or RL01)
+
+#  PT180606: write out 1 and zero for scale and bias - we don't use the other values, ever!
+  echo "0.000 0.000 0.000" >> ICS_${suffix_date}_${hr_str}.${sat}
+  echo "0.000 0.000 0.000" >> ICS_${suffix_date}_${hr_str}.${sat}
+  echo "1.0   1.0   1.0  " >> ICS_${suffix_date}_${hr_str}.${sat}
+
+  set L1 = `(grep GPS_ANT_${sat}_L1 $setup_cmdfile | awk '{print $3,$4,$5,$6}')`
+  echo $L1 >> ICS_${suffix_date}_${hr_str}.${sat}
+  set L2 = `(grep GPS_ANT_${sat}_L2 $setup_cmdfile | awk '{print $3,$4,$5,$6}')`
+  echo $L2 >> ICS_${suffix_date}_${hr_str}.${sat}
+
+
+end       # end of satellite loop
+
+###############################
+###  Dealiasing data files  ###
+###############################
+if ( $dealias == 'AOD05' )then
+  set dealias_dir = $dealias_dir/RL05
+  set dealias_num = "05"
+else if ( $dealias == 'AOD04' ) then
+  set dealias_dir = $dealias_dir/RL04
+  set dealias_num = "04"
+else if ( $dealias == 'AOD06' ) then
+  set dealias_dir = $dealias_dir/RL06
+  set dealias_num = "06"
+else
+  echo "The specified dealiasing model, $dealias, is not yet implemented"
+  echo "The specified dealiasing model, $dealias, is not yet implemented"
+  exit
+endif
+
+set prefix = AOD1B_${year}-${month}
+set prefix_nextday = AOD1B_`date -d "$suffix_nextdate" +%Y-%m`
+if($mission == 0)then
+  set dealias_tar = ${dealias_dir}/${prefix}_${dealias_num} #.tar.gz
+  set dealias_tar_nextday = ${dealias_dir}/${prefix_nextday}_${dealias_num} #tar.gz
+else if ($mission == 1)then
+  set dealias_tar = ${dealias_dir}/${prefix}_${dealias_num} #tgz
+  set dealias_tar_nextday = ${dealias_dir}/${prefix_nextday}_${dealias_num} #tgz
+endif
+
+# PT121101: check that the data file exists. If not, exit.
+if ( -e $dealias_tar.tar.gz )  then
+  echo "Extracting dealiasing data (atmosphere and non-tidal ocean) ... "
+  tar -xvf $dealias_tar.tar.gz --wildcards --no-anchored "*${suffix_date}*" > /dev/null
+  tar -xvf $dealias_tar_nextday.tar.gz --wildcards --no-anchored "*${suffix_nextdate}*" > /dev/null
+  ls -l AOD1B*.asc
+else if ( -e $dealias_tar.tgz ) then
+  echo "Extracting dealiasing data (atmosphere and non-tidal ocean) ... "
+  tar -xvf $dealias_tar.tgz --wildcards --no-anchored "*${suffix_date}*" > /dev/null
+  tar -xvf $dealias_tar_nextday.tgz --wildcards --no-anchored "*${suffix_nextdate}*" > /dev/null
+  ls -l AOD1B*.asc 
+else
+  echo Input Level-1B dealiasing file does not exist: $dealias_tar
+  echo Input Level-1B dealiasing file does not exist: $dealias_tar > setup.FATAL
+  echo sh_setup_grace halted.
+  exit
+endif
+
+# PT180606: remove the diurnal and semi-diurnal atmospheric tides from the AOD1B products
+#if($dealias != "AOD06")then
+  ${version}/com/sh_make_daily_AOD1B $year $month $day RL$dealias_num
+#else
+#  echo "Not removing tides from AOD1B RL06"
+#endif
+
+
+
+##################################################
+###  Star Camera and Accelerometer data files  ###
+##################################################
+
+foreach sat ($sats)
+
+  set suffix = ${year}-${month}-${day}_${sat}_${RL_num}
+  set suffix_date = ${year}-${month}-${day}
+
+  if($mission == 0 )then
+    set SCA_file = SCA1B_${suffix}
+    set ACC_file = ACC1B_${suffix}
+
+    set mission_ext = "asc"
+    set acc = "ACC"
+
+# convert star camera and accelerometer data files to ascii format
+    echo "extracting ascii files for SCA1B and ACC1B for sat " $sat "..."
+    Bin2AsciiLevel1.e -binfile ${SCA_file}.dat  -ascfile ${SCA_file}.${mission_ext}
+    Bin2AsciiLevel1.e -binfile ${ACC_file}.dat  -ascfile ${ACC_file}.${mission_ext}
+
+# Test fix for "Broken pipe" error message in gadi run error log
+    echo "Mark1" >>/dev/stderr
+    ls -lt *.asc |head -2
+    echo "Mark2" >>/dev/stderr
+#    ls -lt | head -3 | tail -n -2
+    echo "Mark3" >>/dev/stderr
+
+# PT180407: if in 2017 (Jan to April) there are no ACC obs for GRACE B. Use the transplant ones.
+# PT180407: there is an unresolved issue here that the transplanted files start 1 second into the day ... don't
+#           know how to fix this at this stage - just manually edit the file to add the missing data point !
+     if ( $year == 2017 && $month < 5  ) then
+       echo "extract the transplanted ACC file for GRACE B"
+       cp /scratch/compute1/geodynamics/grace_data/RL02/2017/GRACE_B_transplant/ACC1B_${suffix_date}_B_R3.dat .
+       Bin2AsciiLevel1.e -binfile ACC1B_${suffix_date}_B_R3.dat -ascfile ACC1B_${suffix_date}_B_${RL_num}.${mission_ext}
+     endif
+  else if ($mission == 1)then
+    ls -l AC?1B*.txt SCA1B*txt 
+    set SCA_file = SCA1B_${suffix}
+# PT190525: the GRACE FO files are actually ACT, not ACC
+    set ACC_file = ACT1B_${suffix}
+    set mission_ext = "txt"
+    set acc = "ACT"
+  endif
+
+# RM180814: the following will extract the previous and next day ACC files and extend the ACC file according to the number of epochs defined by $extend 
+# PT190807: do it for the KBR as well
+  if ($extend > 0)then
+    if ( ! -d extended_L1B ) mkdir extended_L1B
+    set prev = `expr $strt - 86400`
+    set next = `expr $strt + 86400`
+    
+    echo "extracting previous and next day ACC/KBR data files..."    
+    foreach gracesec ($prev $next)
+      echo $gracesec
+      set tmp_date_string = `doy ${gracesec}g | grep Date | awk '{print $2}' | awk '{split($0,date,"/"); print date[1], date[2], date[3]}'`
+      set tmp_yr_string = `echo ${tmp_date_string} | awk '{print $1}'`
+      set tmp_month_string = `echo ${tmp_date_string} | awk '{print $2}'`
+      set tmp_day_string = `echo ${tmp_date_string} | awk '{print $3}'`
+
+      echo extract additional $acc file ${acc}1B_${tmp_yr_string}-{$tmp_month_string}-${tmp_day_string}_00-00-00_${RL_num}.$mission_ext
+      if($mission == 0)then
+        ~/gt/com/sh_extract_level1B ${tmp_yr_string} ${tmp_month_string} ${tmp_day_string} $acc RL$RL_num
+      else if ($mission == 1)then
+        ~/gt/com/sh_extract_level1B_GRACEFO ${tmp_yr_string} ${tmp_month_string} ${tmp_day_string} $acc RL$RL_num
+      endif
+      echo "done date:" ${tmp_yr_string} ${tmp_month_string} ${tmp_day_string}
+    end
+
+    echo ~/gt/util/extend_L1B ${ACC_file}.$mission_ext $extend
+    ~/gt/util/extend_L1B ${ACC_file}.$mission_ext $extend 
+  endif 
+  
+#####################################
+##  create input file for graceorb ##  Date 1992/07/23  0:00
+#####################################
+  set hrmin_string =  `doy ${strt}g | grep Date | awk '{printf "%2.2d %2.2d\n", substr($0,17,2), substr($0,20,2) }'` 
+  set hour_string = `echo ${hrmin_string} | awk '{print $1}'`
+  set min_string = `echo ${hrmin_string} | awk '{print $2}'`
+
+  rm in_file_${sat}_${year}-${month}-${day}_${hour_string} >& /dev/null
+
+# set up the in_file_${sat} files for GRACEORB
+  echo $setup_cmdfile                                                                                        > in_file_${sat}_${year}-${month}-${day}_${hour_string}                 
+  echo GTORB_${year}-${month}-${day}_${hour_string}-${min_string}-00_${sat}_${RL_num}.$gtorb_type           >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo ICS_${suffix_date}_${hour_string}.${sat}                                                             >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo $mascon_file                                                                                         >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo $mascon_dir/ocean_mascons_stage2                                                                     >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo ${mascon_file}.flag                                                                                  >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo def_grav.dat                                                                                         >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo aod_${suffix_date}.asc                                                                               >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo ${SCA_file}.${mission_ext}                                                                           >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  if($extend > 0)then
+    echo "./extended_L1B/"${ACC_file}.${mission_ext}							    >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  else if($extend == 0)then
+    echo ${ACC_file}.${mission_ext}                                                                         >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  endif
+  echo GOCE.deg200                                                                                          >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo desaicoeff                                                                                           >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo ~/gg/grace/tables/tide_mascons/${year}/FES2015_${year}-${month}-${day}.nc                            >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+# name of model to linearise accelerometer data, start and stop epoch, for each orthogonal axis
+  echo $acc_model[1]"     " 1 86400                                                                                   >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo $acc_model[2]"     " 1 86400                                                                                   >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+  echo $acc_model[3]"     " 1 86400                                                                                   >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+# PT181024: add the surface to which the mascons should refer
+  echo $mascon_surface                                                                                                >> in_file_${sat}_${year}-${month}-${day}_${hour_string}
+
+end
+
+# bring in the KBR, THR and, if needed, LRI data
+if($mission == 0)then
+  ${version}/com/sh_extract_level1B $year $month $day KBR RL$RL_num
+  ${version}/com/sh_extract_level1B $year $month $day THR RL$RL_num
+endif
+# PT190525: turn this off for the moment, there is no LRI1B data in what JPL have released.
+echo "Not extracting LRI1B data for now ... there isn't any"
+#if($mission == 1)${version}/com/sh_extract_level1B $year $month $day LRI RL$RL_num
+
+######################################################
+#### Extract RL03 updates and setup L1B file list ####
+######################################################
+     
+if ($RL_num == "02")then
+  echo "Extracting RL03 files"
+  tar xvfz ${datadir}/RL03/grace_1B_${year}-${month}_03.tgz --wildcards \*${suffix_date}\*
+#  tar xvfz ${datadir}/RL03/grace_1B_${year}-${month}_03.tgz --wildcards \*${suffix_nextdate}\*
+#  tar xvfz ${datadir}/RL03/grace_1B_${year}-${month}_03.tgz --wildcards \*${suffix_prevdate}\*
+  set ID1 = ${suffix_date}_${sats[1]}_03
+  set ID2 = ${suffix_date}_${sats[2]}_03
+  set IDX = ${suffix_date}_X_03
+  
+  set FILE = SCA1B_${ID1}
+  if (-e ${FILE}.dat) then
+     Bin2AsciiLevel1.e -binfile ${FILE}.dat  -ascfile ${FILE}.asc
+     set FILE = SCA1B_${ID2}
+     Bin2AsciiLevel1.e -binfile ${FILE}.dat  -ascfile ${FILE}.asc
+     set RL_SCA=03
+  else
+     set RL_SCA=02
+  endif
+
+  set FILE = KBR1B_${IDX}
+  if (-e ${FILE}.dat) then
+     Bin2AsciiLevel1.e -binfile ${FILE}.dat  -ascfile ${FILE}.asc
+     set RL_KBR=03
+  else
+     set RL_KBR=02
+  endif
+
+  set FILE = ACT1B_${ID2}
+  set ACCTAG1=ACC1B
+  if (-e ${FILE}.dat) then
+     Bin2AsciiLevel1.e -binfile ${FILE}.dat  -ascfile ${FILE}.asc
+     set ACCTAG2=ACT1B
+     set RL_ACC2=03
+  else
+     set ACCTAG2=ACC1B
+     set RL_ACC2=02
+  endif
+   
+endif
+
+if ($RL_num == "04")then
+  set RL_SCA=$RL_num
+  set RL_KBR=$RL_num
+  set RL_ACC2=$RL_num
+  set ACCTAG1=ACT1B
+  set ACCTAG2=ACT1B
+  endif
+
+##############################
+#### create L1B file list ####
+##############################
+
+set L1Blist=L1B_files.txt
+echo '! Level1B file namelist' > $L1Blist
+echo '&L1B_files' >> $L1Blist
+
+# PT190807: add the extend_L1B directory to file names if required
+if($extend > 0)then
+  set extend_dir = "extended_L1B/"
+else
+  set extend_dir = ""
+endif
+set ACC1 = \"${extend_dir}${ACCTAG1}_${suffix_date}_${sats[1]}_${RL_num}.${gps_suffix}\"
+set ACC2 = \"${extend_dir}${ACCTAG2}_${suffix_date}_${sats[2]}_${RL_ACC2}.${gps_suffix}\"
+set SCA1 = \"SCA1B_${suffix_date}_${sats[1]}_${RL_SCA}.${gps_suffix}\"
+set SCA2 = \"SCA1B_${suffix_date}_${sats[2]}_${RL_SCA}.${gps_suffix}\"
+set GNV1 = \"GNV1B_${suffix_date}_${sats[1]}_${RL_num}.${gps_suffix}\"
+set GNV2 = \"GNV1B_${suffix_date}_${sats[2]}_${RL_num}.${gps_suffix}\"
+set THR1 = \"THR1B_${suffix_date}_${sats[1]}_${RL_num}.${gps_suffix}\"
+set THR2 = \"THR1B_${suffix_date}_${sats[2]}_${RL_num}.${gps_suffix}\"
+
+# PT190724: for GRACE the inter-satellite files are "X" but are "Y" for GRACE FO
+if($mission == 0)set inter_sat = "X"
+if($mission == 1)set inter_sat = "Y"
+set KBRX = \"KBR1B_${suffix_date}_${inter_sat}_${RL_KBR}.${gps_suffix}\"
+set LRIX = \"LRI1B_${suffix_date}_${inter_sat}_${RL_num}.${gps_suffix}\"
+
+echo ACC = ${ACC1} ${ACC2}\, >> $L1Blist
+echo SCA = ${SCA1} ${SCA2}\, >> $L1Blist
+echo GNV = ${GNV1} ${GNV2}\, >> $L1Blist
+echo THR = ${THR1} ${THR2}\, >> $L1Blist
+echo KBR = ${KBRX}, >> $L1Blist
+echo LRI = ${LRIX} >> $L1Blist
+echo / >> $L1Blist
+
+############### 
+##  Cleanup  ##
+###############
+echo Removing extraneous L1B files
+foreach file (ACC ACT SCA GNV KBR AHK CLK GPS IHK MAG TDP TNK USO MAS TIM)
+  set num_files = `ls ${file}1B*.dat ${file}1B*.rpt |& wc -w`
+  if($num_files > 0)then
+    rm ${file}1B_${year}-${month}-${day}*.dat  ${file}1B_${year}-${month}-${day}*.rpt >& /dev/null
+  endif
+end
+
+###### ********* #########
+exit
+###### ********* #########
+
+
+

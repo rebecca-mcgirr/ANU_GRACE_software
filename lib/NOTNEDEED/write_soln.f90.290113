@@ -1,0 +1,88 @@
+!PROGRAM write_soln to write the output from gracefit and gracekal in the same format
+
+! L. Lescarmontier from write_soln gracefit
+! 15 January 2013
+
+    subroutine write_soln (gracenam,N,apriori,vector,sigma)
+         
+!   Write apriori, solution vector and VCV to a file for both GRACEFIT and GRACEKAL
+     
+    implicit none
+
+    include '../includes/gracefit.h90'
+
+! -- PARAMETERS --                 
+   
+    integer*4 :: i,j,N
+
+    real*8 :: spanhrs
+
+    character*8 :: dattim, gracenam, gracefit, gracekal
+
+! PT130110: add a reference epoch to the VCV file header
+    integer date(5)
+    double precision sec
+
+ print*, 'program write_soln called by:' , gracenam
+                  
+!LL en fonction du programme appele change l'input
+! -- GRACEFIT CASE --
+
+   if (gracenam == "gracefit") then
+
+!   Prepare and write out headers
+    call runtim( dattim )
+    write(luvcv,'(a,a19)') 'GRACEFIT solution: GRACEFIT run ',dattim
+    write(luvcv,'(a,a,1x,a)') 'Reference GTORB files: ',(trim(gt_fnam(i)),i=1,2)
+    spanhrs = nepoch*5.d0/3600.d0
+    write(luvcv,'(a,f6.1,a)') 'Reference GTORB files span: ',spanhrs,' hrs'
+! PT130110: add a line, being the reference epoch of the GRACEFIT solution (ie the middle)
+    call gsec_to_ymdhms( dble(gt_stime(1)+nepoch*2.d0/2.d0), date, sec )
+    write(luvcv,'(a,i4,4(a1,i2.2),a1,f05.2)') 'Reference GRACEFIT solution epoch: ' &
+             ,date(1),"-",date(2),"-",date(3)," ",date(4),"-",date(5),"-",sec 
+    write(luvcv,*) 'Number of estimated parameters: ',nparam
+    write(luvcv,'(25(a30,1x))') 'List of parameters estimated: ',(prmnam(i),i=1,nparam)
+! -- END OF THE HEADER --
+!   Write out solution a priori
+    write(luvcv,'(a)') 'SOLUTION A PRIORI:'
+    write(luvcv,'(25(f14.5,1x))') ((apriori(i)),i=1,nparam)
+!   Write out solution vector
+    write(luvcv,'(a)') 'SOLUTION VECTOR:'
+    write(luvcv,'(25(f14.5,1x))') ((vector(i)),i=1,nparam)
+!   Write out the VCV
+    write(luvcv,'(a)') 'SOLUTION VCV:'
+    do i = 1,nparam
+        write(luvcv,*) (sigma(i,j),j=1,nparam)
+    enddo                                                                      
+
+! Dans le cas ou nous sommes dans gracekal
+! -- GRACEKAL CASE --
+    else
+    write(kfvcv,*) 'GRACEKAL solution'
+    write(kfvcv,*) 'Number of estimated parameters: ',N
+    print*, 'Number of estimated parameters' ,N
+! -- END OF THE HEADER --
+! write the apriori
+    write(kfvcv,'(a)') 'SOLUTION A PRIORI:'
+    write(kfvcv,*) ((apriori(i)), i=1,N)
+! write the vector file
+    write(kfvcv,'(a)') 'SOLUTION VECTOR:'
+   do i=1,24
+     write(kfvcv,'(2(f12.5,1x))') vector(i), dsqrt(sigma(i,i))
+   enddo
+   do i= 24 + 1, N
+     write(kfvcv,'(2(f12.5,1x))') vector(i), dsqrt(sigma(i,i)) 
+   enddo
+! write the vcv file            
+    write(kfvcv,'(a)') 'SOLUTION VCV:'
+   do i= 1, N
+    write(kfvcv,*) ((sigma(j,i)), j=1, N)   
+   enddo
+   endif
+ return
+
+   end Subroutine write_soln
+
+
+
+

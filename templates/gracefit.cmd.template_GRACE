@@ -1,0 +1,233 @@
+# GRACEFIT command file (gracefit.cmd)
+# V2.0 (2013/07/31)
+#
+############################################################# DEBUG #############################################################
+#
+# Select whether to print out program set up without running it (0) or to run the program (1)
+ run_program:  1
+#
+#                                        For rest of file:  0 = do not use,  1 = use
+#
+#
+# Select whether to print out uncertainties on observations and derived data weights
+ wght_print_out: 0
+#
+# Select whether to print out uncertainties on parameters and derived constraints
+ const_print_out: 0
+#
+#
+#################################################################################################################################
+#
+# Which epochs to stack in the normal equations?
+  start_neq:  1    
+  end_neq:        
+# Where to stop within gracefit?
+# 0: at the end; 1: after outputting prefit residuals; 2: after outputting normal equations
+ gracefit_step: 0
+
+# Decimation level when stacking the normal equations (i.e. use every nth observation)
+  norm_decimate:  10 
+
+
+############################################################# SETUP #############################################################
+#
+# Select the mission: GRACE: 0, GRACE FO: 1, GRACE II: 2
+ mission: M
+#
+# Select which satellites should be considered: GRACE [A B]
+ satellites:   1  1
+#
+# Select how often we want to read in GNV data: (s)
+ gnv_int:  5
+#
+###### Observations ######
+#
+# Select which observations to consider [pos vel] (cannot use vel without using pos)
+ gobs:   1  1
+#
+# Select which k-band data types to be used [R RR RA] (can only have any of these if both satellites are being considered)
+ kband:   0  1  1
+#
+# Select which antenna offset conditions to consider [pos vel] (cannot use vel without using pos)
+ antenna_obs:   0  0
+#
+#
+###### Condition equations ######
+#
+# Select whether to apply shadow conditions (cannot distinguish between coordinates)
+ shadow:   0
+# Select model to use to linearise (ie no slope or bend) accelerometer obs across a day. Options are:
+# 0: none, 1: linear, 2: quadratic, 3: exponential of some sort?  [only "0" and "2" are coded at present]
+ acc_obs_model: 0  0  0
+#
+# Select whether to apply accelerometer scale constraints during shadow  (cannot distinguish between coordinates)
+ use_accel_scl_const:   0
+#
+# Select whether to apply mean acceleration condition (can only be considered if both satellites are being considered)
+# PT180622: turn this off - it breaks gracefit as of 22 June 2018
+ mean_accel:   0
+#
+#
+# use outlier mask? PT220624 set the defalt to "yes". It will not take action if the file outlier.mask is not present.
+ use_outlier_mask: 1 
+
+ ###### Parameters ######
+#
+# Select which gps parameters to estimate: [pos vel]
+ gprm:   1  1
+#
+# Select whether to estimate accelorometer bias and scale
+ scale:  1
+ bias:   1
+#
+# Select whether to estimate twice-per-rev parameters (sine, cosine)
+ once-per-rev:       0
+ twice-per-rev:      0 
+# Select whether to estimate antenna offsets
+ antenna_offset:     0
+#
+# Select whether to estimate mascons (number of mascons read from GTORB file)
+ mascons:            0
+# apply spatial constraints on mascons
+ msc_len_const:      0
+# apply conditional equation of conservation of mass on mascons
+ msc_conserve_mass : 0
+# estimate mascon tidal amplitude corrections
+ mascon_tidal:       0
+
+# 
+# Select which empirical components to remove from the a priori kbrr:
+# 0: leave as is
+# 1: INCREMENT ONLY KBRR AND MASCONS. Remove 1st empirical component (takes out high frequency noise)
+# 2. remove 1st empirical component (takes out high frequency noise)
+# 3: remove 1st empirical component PLUS the 1/rev component computed in kb_sponge
+# PT180802: the second number is the component from which to start adding back into the reconstructed signal
+#           (e.g. "2 3" will start reconstructing from component 3 to the end
+ kbrr_decomp_components:  0 0
+#
+# PT190724: add the cosine fft option (off by default) for removing high-frequency noise from inter-satellite obs
+# PT190923: changed this to 0 0.020 0.021 so that we filter above 20 mHz (originally filtered above 10 mHz)
+ kb_cos_fft: 0 0.020 0.021
+#
+# select whether to differentiate the L1B data at the start, then differentiate the prefit range rate residuals
+ kb_NR: 0 0
+#
+#################################################################################################################################
+#
+################################################### OBSERVATION UNCERTAINTIES ###################################################
+#
+###### Satellite specific observations ######
+#
+# Select GPS position, velocity and acceleration observation uncertainties: [x y z] (m)  [vx vy vz] (m/s)
+ gps_sig_A:  PPP PPP PPP VVV VVV VVV
+ gps_sig_B:  PPP PPP PPP VVV VVV VVV
+# make them a little looser so that the kbrr is better fit
+# gps_sig_A:  5.d-2  5.d-2  5.d-2    1.d-4  1.d-4  1.d-4
+# gps_sig_B:  5.d-2  5.d-2  5.d-2    1.d-4  1.d-4  1.d-4
+# gps_sig_A:  3.d+6  3.d+6  3.d+6    1.d+9  1.d+9  1.d+9
+# gps_sig_B:  3.d+6  3.d+6  3.d+6    1.d+9  1.d+9  1.d+9
+#
+# Select GPS antenna offset condition position, velocity and acceleration observation uncertainties: (m)  (m/s)
+ apr_CoM_gps_off_sig_A: 1.d-2 1.d-2 1.d-2      1.d-0 1.d-0 1.d-0
+ apr_CoM_gps_off_sig_B: 1.d-2 1.d-2 1.d-2      1.d-0 1.d-0 1.d-0
+#
+#
+###### Observations for both satellites ######
+#
+# Select k-band range data a priori uncertainty (m)
+ kbr_sig: 1.e-3  
+#         
+# Select k-band range rate data a priori uncertainty (m/s)
+ kbrr_sig: KBRR_SIG    
+#         
+# Select k-band range acceleration data a priori uncertainty (m/s^2)
+ kbra_sig: KBRA_SIG
+
+#
+# Select LRI range data a priori uncertainty (m)
+ lrr_sig: 1.e-3  
+#         
+# Select k-band range rate data a priori uncertainty (m/s)
+ lrrr_sig: LRRR_SIG
+#         
+# Select k-band range acceleration data a priori uncertainty (m/s^2)
+ lrra_sig: LRRA_SIG
+
+
+
+
+#################################################################################################################################
+#
+##################################### Observations related to shadow constraints ################################################
+#
+# Select uncertainties on conditional equations on acceleration during shadow: [ay az] (um/s^2)
+ apr_acc_sig_A: 1.d+0  1.d+0  1.d+3 1.d+3
+ apr_acc_sig_B: 1.d+0  1.d+0  1.d+3 1.d+3 
+#
+# Select mean accelerometer difference a priori uncertainties: [x y z] (um/s^2)
+ mean_dacc_sig:   5.d-0  1.d-5  1.d-0
+#
+# Select accelerometer scale conditional equation a priori uncertainties on single acc obs:  (um/s^2)
+ acc_scl_cond_sig:   1.d+5
+
+
+#
+#################################################################################################################################
+#
+#################################################### PARAMETER UNCERTAINTIES ####################################################
+#
+#
+###### Satellite specific parameters ######
+#
+# Select a priori uncertainties for IC's: [x y z] (m)  [vx vy vz] (m/s)
+ apr_sat_A:  1.d-0 1.d-0 1.d-0   1.d-0 1.d-0 1.d-0
+ apr_sat_B:  1.d-0 1.d-0 1.d-0   1.d-0 1.d-0 1.d-0
+#
+# Select acceleration scale a priori uncertainties: [sclx scly sclz] (Na)
+ apr_sat_scale_A: SCLX  SCLY  1.e-16 
+ apr_sat_scale_B: SCLX  SCLY  1.e-16 
+ 
+# Select acceleration bias a priori uncertainties: [bsx bsy bsz] (um/s^2)
+ apr_sat_bias_A: 2.d+0 2.d+0 2.d-0
+ apr_sat_bias_B: 2.d+0 2.d+0 2.d-0
+
+# Select once-per-rev a priori uncertainties: [Sine Cosine] (um/s^2)
+ apr_1pr_A: 1.0d+2 1.0d+2
+ apr_1pr_B: 1.0d+2 1.0d+2
+ apr_2pr_A: 1.0d+2 1.0d+2
+ apr_2pr_B: 1.0d+2 1.0d+2
+
+#
+# Select GPS antenna offset a priori uncertainties in SRF: [dx dy dz] (m)
+# apr_sat_gps_off_A:  1.d-2  1.d-2  1.d-2
+# apr_sat_gps_off_B:  1.d-2  1.d-2  1.d-2
+#
+###### Observations for both satellites ######
+#
+# Select mascon a priori uncertainties (same for every mascon) (m)
+ apr_mascons: 10.d-0
+# Select mascon tidal amplitude uncertainties (same for each mascon and each consituent
+ apr_tide_mascons: 1.0d+0
+
+###### Ocean Tide Amplitude Parameters #######
+#
+# M2
+  apr_M2_ampl: 2.0 2.0
+# O1
+  apr_O1_ampl: 2.0 2.0
+# S2
+  apr_S2_ampl: 1.d-6 1.d-6
+# K1
+  apr_K1_ampl: 1.d-6 1.d-6
+# K2
+  apr_K2_ampl: 1.d-6 1.d-6
+
+#
+#################################################################################################################################
+#
+########################################################### TOLERANCES ##########################################################
+#
+# Select maximal kbrr prefit tolerance: (m)
+ kbrr_prefit_tol: 1.d3
+#
+#################################################################################################################################

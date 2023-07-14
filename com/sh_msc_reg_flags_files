@@ -1,0 +1,74 @@
+#!/bin/csh -f
+
+# script to generate two files associated with a mascon file
+#
+# 1. the mascon regularisation file (required for gracefit/gracesim/gracekal
+# 2. the dist_flags file: used in graceorb to know whether to treat mascons as a primary point
+#                         source or break down into secondary and/or ternary mascons
+#
+# P. Tregoning
+# 27 January 2017
+
+if ($#argv == 0) then
+  echo "sh_msc_reg_flags_files -f mascon_file -reg_dists 350 350 700 700 -sigmas 0.2 0.2 0.5"
+  echo "where:"
+  echo " reg_dists = land then ocean distances (in N/S, then E,W) in km"
+  echo " sigmas    = land, ocean, polar sigmas (in m)"
+  exit
+endif
+
+##################### SET DEFAULT VALUES    #######################
+set reg_dists = (350 350 700 700)
+set sigmas = (0.5 0.5 0.5)
+set mascon_file = ""
+###################################################################
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set mascon_file = $input[2] ; shift argv
+   breaksw
+    case -reg*:
+      set reg_dists = $input[2]  ; shift argv  
+      set reg_dists = ($reg_dists  $input[3] ) ; shift argv
+      set reg_dists = ($reg_dists  $input[4] ) ; shift argv
+      set reg_dists = ($reg_dists  $input[5] ) ; shift argv
+    breaksw
+    case -sigmas:
+      set sigmas = $input[2] ; shift argv
+      set sigmas = ($sigmas $input[3]) ; shift argv
+      set sigmas = ($sigmas $input[4]) ; shift argv
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+
+if ($mascon_file == "")then
+  echo "No mascon file name entered ... can't do anything !"
+  exit
+else
+  set mascon_outfile_ext = `echo $reg_dists | awk '{printf "%4.4d_%4.4d_%4.4d_%4.4d.reg", $1, $2, $3, $4}'`
+endif
+set reg_dists = (`echo $reg_dists | awk '{print $1 * 1000, $2 * 1000, $3 * 1000, $4 * 1000}'`)
+
+echo reg_dists: $reg_dists
+echo sigmas: $sigmas
+
+###############################################
+# first, create the mascon regularisation file
+###############################################
+echo regularize_mascons $mascon_file ${mascon_file}_$mascon_outfile_ext $reg_dists $sigmas
+regularize_mascons $mascon_file ${mascon_file}_$mascon_outfile_ext.reg  $reg_dists $sigmas
+
+###############################################
+# second, create the dist_flag file
+###############################################
+dist_flag $mascon_file ${mascon_file}.flag 
+
+
+
+

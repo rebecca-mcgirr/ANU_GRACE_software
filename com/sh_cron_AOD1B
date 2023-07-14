@@ -1,0 +1,27 @@
+#!/bin/csh -f
+
+# script to run the downloading of the AOD1B daily files as a regular cron job.
+# The files become available a day or so behind real time. Set a 3-day lag, which is
+# still faster than the timing of when the rest of the L1B data becomes available (roughly
+# three weeks)
+#
+# P. Tregoning
+# 10 February 2022
+
+set version = /home/geod/pault/ga
+set RL_num = 06
+
+# today's date in terms of seconds since 1970-01-01
+set today = `date +%s`
+
+# subtract two days worth of seconds
+@ two_days_ago = $today - 86400 * 3
+
+# convert to year month day
+set ymd = `date --date=@$two_days_ago --rfc-3339='seconds' | awk '{print $1}' | sed s/"-"/" "/g `
+
+# now, download the AOD1B file for this day
+cd /Mdata/GRACE/L1B/AOD1B/RL06/temp
+$version/com/sh_get_daily_AOD1B $ymd RL$RL_num
+cp -f AOD1B_${ymd[1]}-${ymd[2]}_${RL_num}.tgz /Mdata/GRACE/L1B/AOD1B/RL06
+

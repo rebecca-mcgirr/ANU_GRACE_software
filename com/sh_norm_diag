@@ -1,0 +1,71 @@
+#!/bin/csh -f
+
+# script to extract and then plot spatially the normal equation diagonal elements for the mascons. What will it look like?
+
+# P. Tregoning
+# 29 August 2018
+
+if ($#argv == 0 ) then
+  echo "sh_norm_diag mascons_stage4_fixed sim_09_01_deg2_180_gsfc.norm miny maxy"
+  exit
+endif
+
+set msc_file = $1
+set norm_file = $2
+set miny = $3
+set maxy = $4
+set miny_gr = $5
+set maxy_gr = $6
+set day = $7
+
+goto plot
+
+# extract out the diagonal elements for each mascon
+echo extracting the diagonal elements
+~/gt/util/norm_diag_ascii $norm_file | grep -v "line 1" | grep -v reading > diag.dat
+
+# get the primary mascon coordinates
+cat $msc_file | awk '{if (substr($0,8,3) == "  P") {print $6, $5, $11, $1}}' > msc.dat
+
+# paste them together
+# value of AtWb/AtWA
+paste msc.dat diag.dat | awk '{print $1, $2, $6, $3, $4, $7}' > norm_diag.dat
+# value of just AtWb
+#paste msc.dat diag.dat | awk '{print $1, $2, $8, $3, $4, $7}' > norm_diag.dat
+
+
+plot:
+set interval = 1e4
+echo plotting
+set outfile = norm_diag_2010-09-${day}.ps
+set range = "-Rg"
+set proj = "-JR30/15"
+gmt makecpt -Chaxby -T$miny/$maxy/$interval > diag.cpt
+
+set interval = `echo $interval | awk '{print $1 * 10}'`
+
+echo psxy ...
+gmt psxy norm_diag.dat $proj $range -Ba30nesW -X2 -Y3 -Sc0.1 -Cdiag.cpt -K -P > $outfile
+gmt pscoast $proj $range -O -K -W1 -Dc >> $outfile
+tail -n+7 plt_sim_09_${day}_deg2_180_gsfc.kb | awk '{print $4, $3}' > groundtrack.kb
+psxy groundtrack.kb $proj $range -W1,grey -O -K >> $outfile
+
+gmt psscale -D7/-1/15/0.3h -Cdiag.cpt -Ba$interval -O -K >> $outfile
+
+# greenland
+#set proj_gr = "-JR315/15"
+set proj_gr = "-JS0/89.9/35/15"
+set  range_gr = "-R280/350/58/85"
+gmt makecpt -Chaxby -T$miny_gr/$maxy_gr/1 > diag_gr.cpt
+# Antarctic
+set proj_gr = "-JS0/-89.9/35/13"
+set  range_gr = "-Rg"
+
+gmt psxy norm_diag.dat $proj_gr $range_gr  -Ba10:."2010-09-$day":neSW -Y+12 -O -K -Sc0.3 -W1,grey -Cdiag_gr.cpt >> $outfile
+gmt pscoast $proj_gr $range_gr -W1 -O -K  -Dh >> $outfile
+psxy groundtrack.kb $proj_gr $range_gr -W1,grey -O -K >> $outfile
+gmt psscale -D7/-1/15/0.3h -Cdiag_gr.cpt -Ba$interval -O -K >> $outfile
+
+gs $outfile
+
+

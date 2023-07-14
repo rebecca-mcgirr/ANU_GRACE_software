@@ -1,0 +1,267 @@
+#!/bin/csh -f
+
+gmt gmtset FONT_TITLE 10    >& /dev/null
+gmt gmtset FONT_LABEL   15  >& /dev/null
+gmt gmtset PAPER_MEDIA a4+  >& /dev/null
+gmt gmtset PROJ_LENGTH_UNIT cm  
+
+if ($#argv == 0 )then
+  echo "sh_plot_rpy -f plt_paul.kb -map Y/N -thrusts Y 2010 09 07 -x xmin xmax -y_roll min max -y_pitch min max -y_yaw min max -xanot 3000f500 -yanot_roll 4f2 etc ..."
+  exit
+endif
+
+set xmin = 1
+set xmax = 22000
+set ymin_roll = -5
+set ymax_roll = 5
+set ymin_pitch = -5
+set ymax_pitch = 5
+set ymin_yaw = -6
+set ymax_yaw = 6
+set yanot_roll = "2f1"
+set yanot_pitch = "2f1"
+set yanot_yaw = "2f1"
+set xanot = "1000f500"
+set map = N
+set thrusts = "N"
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -x:
+      set xmin = $input[2] ; shift argv  
+      set xmax = $input[3] ; shift argv
+    breaksw
+    case -y_roll:
+      set ymin_roll = $input[2] ; shift argv  
+      set ymax_roll = $input[3] ; shift argv
+    breaksw
+    case -y_pitch:
+      set ymin_pitch = $input[2] ; shift argv  
+      set ymax_pitch = $input[3] ; shift argv
+    breaksw
+    case -y_yaw:
+      set ymin_yaw = $input[2] ; shift argv  
+      set ymax_yaw = $input[3] ; shift argv
+    breaksw
+    case -yanot_roll:
+      set yanot_roll = $input[2]
+    breaksw
+    case -yanot_pitch:
+      set yanot_pitch = $input[2]
+    breaksw
+    case -yanot_yaw:
+      set yanot_yaw = $input[2]
+    breaksw
+    case -xanot:
+      set xanot = $input[2]
+    breaksw
+    case -header:
+      set header = $input[2]
+    breaksw
+    case -map:
+      set map = $input[2] ; shift argv
+    breaksw
+    case -plot:
+      set plot = $input[2] ; shift argv
+    breaksw
+    case -f:
+      set rpy_file = $input[2] ; shift argv
+    breaksw
+    case -thr*:
+      set thrusts = $input[2] ; shift argv
+      set yr = $input[3] 
+      set mon = $input[4]
+      set day = $input[5]
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+
+if ($rpy_file == "")then
+  echo "You need to enter input file with -f [filename]"
+  exit
+endif
+
+if ($map == "N")then
+#  GRACE A
+  tail -n+7 $rpy_file | awk '{print $1 *5, $8}' >  yaw_A.dat
+  tail -n+7 $rpy_file | awk '{print $1 *5, $7}' > pitch_A.dat
+  tail -n+7 $rpy_file | awk '{print $1 *5, $6}' >   roll_A.dat
+
+
+# now GRACE B
+  tail -n+7 $rpy_file | awk '{print $1 *5, $11}' >  yaw_B.dat
+  tail -n+7 $rpy_file | awk '{print $1 *5, $10}' > pitch_B.dat
+  tail -n+7 $rpy_file | awk '{print $1 *5, $9}' >   roll_B.dat
+
+  set outfile = rpy.ps
+  set colour_A = "0/0/255"
+  set colour_B = "255/0/0"
+
+  set proj = "-JX15/4"
+  gmt psxy   roll_A.dat $proj -R$xmin/$xmax/$ymin_roll/$ymax_roll -Ba$xanot/${yanot_roll}:"Roll (mrad)":nesW -X2 -Y23 -P -Wthin,$colour_A -K > $outfile
+  gmt psxy   roll_B.dat $proj -R$xmin/$xmax/$ymin_roll/$ymax_roll -B -O -K -W1/$colour_B >> $outfile
+# deadband lines
+  gmt psxy $proj -R$xmin/$xmax/$ymin_roll/$ymax_roll -O -K -M% -W1/150/150/150 << end >> $outfile
+%
+$xmin 3
+$xmax 3
+%
+$xmin -3
+$xmax -3
+end
+
+  gmt psxy  pitch_A.dat $proj -R$xmin/$xmax/$ymin_pitch/$ymax_pitch -Ba$xanot/${yanot_pitch}:"Pitch (mrad)":nesW -O -K -Wthin,$colour_A -Y-7 >> $outfile
+  gmt psxy  pitch_B.dat $proj -R$xmin/$xmax/$ymin_pitch/$ymax_pitch -B -O -K -W1/$colour_B >> $outfile
+  gmt psxy $proj -R$xmin/$xmax/$ymin_pitch/$ymax_pitch  -O -K -M% -W1/150/150/150 << end >> $outfile
+%
+$xmin 4
+$xmax 4
+%
+$xmin -4
+$xmax -4
+end
+  gmt psxy    yaw_A.dat $proj -R$xmin/$xmax/$ymin_yaw/$ymax_yaw -Ba${xanot}/${yanot_yaw}:"Yaw (mrad)":nesW -O -K -Wthin,$colour_A -Y-7 >> $outfile
+  gmt psxy    yaw_B.dat $proj -R$xmin/$xmax/$ymin_yaw/$ymax_yaw  -O -K -W1/$colour_B >> $outfile
+  gmt psxy $proj -R$xmin/$xmax/$ymin_yaw/$ymax_yaw  -O -K -M% -W1/150/150/150 << end >> $outfile
+%
+$xmin 3
+$xmax 3
+%
+$xmin -3
+$xmax -3
+end
+
+  gmt pstext $proj -R$xmin/$xmax/$ymin_yaw/$ymax_yaw -O -K -G$colour_A -Y+19 -X+2 << end >> $outfile
+$xmin $ymin_yaw 15 0 0 0 GRACE A
+end
+  gmt pstext $proj -R$xmin/$xmax/$ymin_yaw/$ymax_yaw -O -K -G$colour_B -X+9 << end >> $outfile
+$xmin $ymin_yaw 15 0 0 0 GRACE B
+end
+
+# calculate the mean values of r/p/y for each satellite
+set means_A = (`w_mean roll_A.dat 2 no_weight | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean pitch_A.dat 2 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean yaw_A.dat 2 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'`)
+set means_B = (`w_mean roll_B.dat 2 no_weight | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean pitch_B.dat 2 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean yaw_B.dat 2 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'`)
+
+
+# plot the occurrences of attitude-controlling thrusts
+if ($thrusts == "Y") then
+  sh_extract_level1B $yr $mon $day THR RL02
+  set start_secs = `doy $yr $mon $day | tail -1 | awk '{print $6}'`
+  \rm thrust_yaw_?.dat thrust_roll_?.dat thrust_pitch_?.dat
+   touch thrust_yaw_A.dat  thrust_roll_A.dat  thrust_pitch_A.dat  thrust_yaw_B.dat thrust_roll_B.dat thrust_pitch_B.dat 
+# GRACE A 
+#yaw
+  grep "G A" THR1B_${yr}-${mon}-${day}_A_02.asc | awk '{if ($1 >= '$start_secs' && $19 > 0) {print $1 - '$start_secs' , " 1"}}' >> thrust_yaw_A.dat
+  grep "G A" THR1B_${yr}-${mon}-${day}_A_02.asc | awk '{if ($1 >= '$start_secs' && $21 > 0) {print $1 - '$start_secs' , " -1"}}' >> thrust_yaw_A.dat
+#pitch
+  grep "G A" THR1B_${yr}-${mon}-${day}_A_02.asc | awk '{if ($1 >= '$start_secs' && $20 > 0) {print $1 - '$start_secs' , " 1"}}' >> thrust_pitch_A.dat
+  grep "G A" THR1B_${yr}-${mon}-${day}_A_02.asc | awk '{if ($1 >= '$start_secs' && $22 > 0) {print $1 - '$start_secs' , " -1"}}' >> thrust_pitch_A.dat
+#roll
+  grep "G A" THR1B_${yr}-${mon}-${day}_A_02.asc | awk '{if ($1 >= '$start_secs' && $23 > 0) {print $1 - '$start_secs' , " 1"}}' >> thrust_roll_A.dat
+  grep "G A" THR1B_${yr}-${mon}-${day}_A_02.asc | awk '{if ($1 >= '$start_secs' && $24 > 0) {print $1 - '$start_secs' , " -1"}}' >> thrust_roll_A.dat
+
+# GRACE B 
+#yaw
+  grep "G B" THR1B_${yr}-${mon}-${day}_B_02.asc | awk '{if ($1 >= '$start_secs' && $19 > 0) {print $1 - '$start_secs' , " 1"}}' >> thrust_yaw_B.dat
+  grep "G B" THR1B_${yr}-${mon}-${day}_B_02.asc | awk '{if ($1 >= '$start_secs' && $21 > 0) {print $1 - '$start_secs' , " -1"}}' >> thrust_yaw_B.dat
+#pitch
+  grep "G B" THR1B_${yr}-${mon}-${day}_B_02.asc | awk '{if ($1 >= '$start_secs' && $20 > 0) {print $1 - '$start_secs' , " 1"}}' >> thrust_pitch_B.dat
+  grep "G B" THR1B_${yr}-${mon}-${day}_B_02.asc | awk '{if ($1 >= '$start_secs' && $22 > 0) {print $1 - '$start_secs' , " -1"}}' >> thrust_pitch_B.dat
+#roll
+  grep "G B" THR1B_${yr}-${mon}-${day}_B_02.asc | awk '{if ($1 >= '$start_secs' && $23 > 0) {print $1 - '$start_secs' , " 1"}}' >> thrust_roll_B.dat
+  grep "G B" THR1B_${yr}-${mon}-${day}_B_02.asc | awk '{if ($1 >= '$start_secs' && $24 > 0) {print $1 - '$start_secs' , " -1"}}' >> thrust_roll_B.dat
+
+# now plot the thrusts under each angle
+echo 'plotting the thrusts'
+set proj = "-JX15/2"
+gmt psxy thrust_roll_A.dat -Ss0.1 -G0/0/255 $proj -R$xmin/$xmax/-2/2 -Ba$xanot/1000:"Thrust":neSW -O -K -Y-7 -X-11 >> $outfile
+gmt psxy thrust_roll_B.dat -Sc0.1 -G255/0/0 $proj -R$xmin/$xmax/-2/2 -O -K >> $outfile
+
+gmt psxy thrust_pitch_A.dat -Ss0.1 -G0/0/255 $proj -R$xmin/$xmax/-2/2 -Ba$xanot/1000:"Thrust":neSW -O -K -Y-7  >> $outfile
+gmt psxy thrust_pitch_B.dat -Sc0.1 -G255/0/0 $proj -R$xmin/$xmax/-2/2 -O -K >> $outfile
+
+gmt psxy thrust_yaw_A.dat -Ss0.1 -G0/0/255 $proj -R$xmin/$xmax/-2/2 -Ba${xanot}:"Time since start of orbit (sec)":/1000:"Thrust":neSW -O -K -Y-7  >> $outfile
+gmt psxy thrust_yaw_B.dat -Sc0.1 -G255/0/0 $proj -R$xmin/$xmax/-2/2 -O -K >> $outfile
+endif
+
+endif
+
+gs $outfile
+exit
+
+
+################################
+#                              #
+#           M  A  P            #
+#                              #
+################################
+
+# plot the magnitude of the roll, pitch, yaw errors along the ground track
+if ($map == "Y") then
+  set outfile = rpy_map.ps
+  set colour_A = "0/0/255"
+  set colour_B = "255/0/0"
+
+#  GRACE A
+  tail -n+7 $rpy_file | awk '{print $4, $3, $8}' >  roll_A.dat
+  tail -n+7 $rpy_file | awk '{print $4, $3, $7}' > pitch_A.dat
+  tail -n+7 $rpy_file | awk '{print $4, $3, $6}' >   yaw_A.dat
+
+
+# now GRACE B
+  tail -n+7 $rpy_file | awk '{print $4, $3, $11}' >  roll_B.dat
+  tail -n+7 $rpy_file | awk '{print $4, $3, $10}' > pitch_B.dat
+  tail -n+7 $rpy_file | awk '{print $4, $3, $9}' >   yaw_B.dat
+
+# roll
+makecpt -Chaxby -T-5/5/0.25 > rpy_map.cpt
+pscoast -JR0/9 -Rg -X1 -Y22 -K -P -W1/150/150/150 -A100000 > $outfile
+psxy roll_A.dat -JR -R -Ba1000:."GRACE A Roll":nesw -Sc0.05 -Crpy_map.cpt -O -K >> $outfile
+pscoast -JR -R -K -O -W1/150/150/150 -A100000 -X+10 >> $outfile
+psxy roll_B.dat -JR -R -Ba1000:."GRACE B Roll":nesw -Sc0.05 -Crpy_map.cpt -O -K >> $outfile
+psscale -Crpy_map.cpt -D-0.5/-0.5/15/0.4h -Ba2f0.5:"mrad": -O -K >> $outfile
+
+# pitch
+makecpt -Chaxby -T-4/0/0.25 > rpy_map.cpt
+pscoast -JR -R -K -O -W1/150/150/150 -A100000 -X-10 -Y-9.5 >> $outfile
+psxy pitch_A.dat -JR -R -Ba1000:."GRACE A Pitch":nesw -Sc0.05 -Crpy_map.cpt -O -K >> $outfile
+pscoast -JR -R -K -O -W1/150/150/150 -A100000 -X+10 >> $outfile
+psxy pitch_B.dat -JR -R -Ba1000:."GRACE B Pitch":nesw -Sc0.05 -Crpy_map.cpt -O -K >> $outfile
+psscale -Crpy_map.cpt -D-0.5/-0.5/15/0.4h -Ba2f0.5:"mrad": -O -K >> $outfile
+
+
+# yaw
+makecpt -Chaxby -T-6/6/0.25 > rpy_map.cpt
+pscoast -JR -R -K -O -W1/150/150/150 -A100000 -X-10 -Y-9.5 >> $outfile
+psxy yaw_A.dat -JR -R -Ba1000:."GRACE A Yaw":nesw -Sc0.05 -Crpy_map.cpt -O -K >> $outfile
+pscoast -JR -R -K -O -W1/150/150/150 -A100000 -X+10 >> $outfile
+psxy yaw_B.dat -JR -R -Ba1000:."GRACE B Yaw":nesw -Sc0.05 -Crpy_map.cpt -O -K >> $outfile
+psscale -Crpy_map.cpt -D-0.5/-0.5/15/0.4h -Ba2f0.5:"mrad": -O -K >> $outfile
+
+# calculate the mean values of r/p/y for each satellite
+set means_A = (`w_mean roll_A.dat 3 no_weight | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean pitch_A.dat 3 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean yaw_A.dat 3 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'`)
+set means_B = (`w_mean roll_B.dat 3 no_weight | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean pitch_B.dat 3 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'` `w_mean yaw_B.dat 3 no_weight  | grep "The  mean is" | awk '{printf "%8.3f\n", $4}'`)
+
+
+endif
+
+ 
+
+echo Mean values
+echo ROLL  : $means_A[1] $means_B[1]
+echo PITCH : $means_A[2] $means_B[2]
+echo YAW   : $means_A[3] $means_B[3]
+
+if ($map == "N")then
+  gmt pstext -JX -R -O -K -Y-4 -X+1 -N << end >> $outfile
+$xmin  0 12 0.0 0 0 GRACE A mean angle (roll, pitch, yaw) $means_A
+$xmin -2 12 0.0 0 0 GRACE B mean angle (roll, pitch, yaw) $means_B
+end
+endif
+gs $outfile
+

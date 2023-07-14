@@ -1,0 +1,354 @@
+#!/bin/csh -f
+
+# script to plot the ACC1B data for a particular day
+#
+# P. Tregoning
+# 17 May 2013
+
+gmt gmtset FONT_TITLE 10    >& /dev/null
+gmt gmtset FONT_LABEL   15  >& /dev/null
+gmt gmtset PAPER_MEDIA a4+  >& /dev/null
+gmt gmtset PROJ_LENGTH_UNIT cm  
+gmt gmtset FONT_ANNOT_PRIMARY 12p
+
+if ($#argv == 0 ) then
+  echo "sh_plot_ACC -t YYYY MM DD -f <fit_file>  -y_all ymin ymax (or individually with -y_X yminX ymaxX -y_Y etc) [ -epochs x_start x_end -biasA X Y Z  -scaleA X Y Z -biasB X Y Z -scaleB X Y Z  -swap Y/N/D] "
+  exit
+endif
+
+
+set RL_num = 02
+set plot = "Y"
+set gs_conv = "N"
+set xmin = 1
+set xmax = 86400
+set ymin_X = -125
+set ymax_X = 25
+set ymin_Y = -75
+set ymax_Y = 75
+set ymin_Z = -80
+set ymax_Z = 80
+set xanot = "10000f5000"
+set yanot_X = "50f25"
+set yanot_Y = "30f10"
+set yanot_Z = "50f25"
+set fit_file = "none"
+set swap = "Y"
+set apriori = "N"
+# default bias and scales
+set biasA = (0 0 0)
+#set scaleA = (0.95950 0.97970 0.94850)
+set biasB = (0 0 0)
+#set scaleB = (0.94650  0.98420 0.93030)
+set scaleA = (1 1 1)
+set scaleB = (1 1 1)
+set vcv = "N"
+set zmean = "Y"
+# default type of acc file (Level1B, .asc means linear and quadratic removed)
+set L1B = "Y"    
+# mission:  0: GRACE, 1: GRACE FO; 2: GRACE II
+set mission = 0        
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -biasA:
+      set biasA = $input[2] ; shift argv  
+      set biasA = ($biasA $input[3]) ; shift argv  
+      set biasA = ($biasA $input[4]) ; shift argv  
+    breaksw
+    case -biasB:
+      set biasB = $input[2] ; shift argv  
+      set biasB = ($biasB $input[3]) ; shift argv  
+      set biasB = ($biasB $input[4]) ; shift argv  
+    breaksw
+    case -scaleA:
+      set scaleA = $input[2] ; shift argv  
+      set scaleA = ($scaleA $input[3]) ; shift argv  
+      set scaleA = ($scaleA $input[4]) ; shift argv  
+    breaksw
+    case -scaleB:
+      set scaleB = $input[2] ; shift argv  
+      set scaleB = ($scaleB $input[3]) ; shift argv  
+      set scaleB = ($scaleB $input[4]) ; shift argv  
+    breaksw
+    case -x:
+      set xmin = $input[2] ; shift argv  
+      set xmax = $input[3] ; shift argv
+    breaksw
+    case -y_X:
+      set ymin_X = $input[2] ; shift argv  
+      set ymax_X = $input[3] ; shift argv
+    breaksw
+    case -y_Y:
+      set ymin_Y = $input[2] ; shift argv  
+      set ymax_Y = $input[3] ; shift argv
+    breaksw
+    case -y_Z:
+      set ymin_Z = $input[2] ; shift argv  
+      set ymax_Z = $input[3] ; shift argv
+    breaksw
+    case -yanot_X:
+      set yanot_X = $input[2]
+    breaksw
+    case -yanot_Y:
+      set yanot_Y = $input[2]
+    breaksw
+    case -yanot_Z:
+      set yanot_Z = $input[2]
+    breaksw
+    case -yanot_all:
+      set yanot_X = $input[2]
+      set yanot_Y = $input[2]
+      set yanot_Z = $input[2]
+    breaksw
+    case -xanot:
+      set xanot = $input[2]
+    breaksw
+    case -asc:
+    case -L1B:
+      set L1B = $input[2]
+    breaksw
+    case -header:
+      set header = $input[2]
+    breaksw
+    case -plot:
+      set plot = $input[2] ; shift argv
+    breaksw
+    case -swap:
+      set swap = $input[2] ; shift argv
+    breaksw
+    case -t:
+      set yr     = $input[2] ; shift argv
+      set month  = $input[3] ; shift argv
+      set day    = $input[4] ; shift argv
+    breaksw
+    case -conv*:
+      set gs_conv = "Y"
+    breaksw
+    case -RL:
+      set RL_num = $input[2] ; shift argv
+    breaksw
+    case -f*:
+      set fit_file = $input[2] ; shift argv
+    breaksw
+    case -apriori:
+    case -prefit:
+      set apriori  = $input[2] ; shift argv
+    breaksw
+    case -vcv:
+      set vcv  = "Y"
+    breaksw
+    case -zmean:
+      set zmean  = "Y"
+    breaksw
+    case -mission:
+      set mission  = $input[2] ; shift argv
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+if ($mission == 0)then
+  set sat1 = "A"
+  set sat2 = "B"
+else if ($mission == 1)then
+  set sat1 = "C"
+  set sat2 = "D"
+endif
+
+set outfile = acc_${yr}-${month}-${day}.ps
+set jpgfile = acc_${yr}-${month}-${day}.jpg
+
+# if a gracefit fit file was provided, extract the biases and scales from it.
+if ($fit_file == "none")then
+  echo no fit file being used
+endif
+
+if ($fit_file != "none" && $vcv == "Y")then
+  echo Using a vcv file
+  set biasA = `grep "SAT A: bs" $fit_file | cut -c52-65`
+  set biasB = `grep "SAT B: bs" $fit_file | cut -c52-65`
+  set scaleA = `grep "SAT A: scl" $fit_file | cut -c52-65`
+  set scaleB = `grep "SAT B: scl" $fit_file | cut -c52-65`
+  echo VCV scaleA: $scaleA
+  echo VCV biasA:  $biasA
+  echo VCV scaleB: $scaleB
+  echo VCV biasB:  $biasB
+  goto swap
+endif
+
+echo are we here $fit_file $vcv $apriori
+if ($fit_file != "none" && $vcv != "Y" && $apriori == "Y" )then
+    echo Reading apriori values from file $fit_file 
+    set biasA = `grep "SAT A: bs" $fit_file | awk '{print $6}'`
+    set biasB = `grep "SAT B: bs" $fit_file | awk '{print $6}'`
+#    if(`grep "SAT A: scl" $fit_file | wc -l` > 0)then
+      set scaleA = `grep "SAT A: scl" $fit_file | awk '{print $6}'`
+      set scaleB = `grep "SAT B: scl" $fit_file | awk '{print $6}'`
+#    endif
+    echo Apriori fit file scaleA: $scaleA
+    echo Apriori fit file biasA:  $biasA
+    echo Apriori fit file scaleB: $scaleB
+    echo Apriori fit file biasB:  $biasB
+    goto swap
+endif
+
+echo are we still here
+if ($fit_file != "none" && $vcv != "Y" && $apriori == "N") then 
+    echo Reading estimated values from file $fit_file 
+# debug
+  echo test of biasA `grep "SAT A: bs" $fit_file | cut -c65-78`
+    set biasA = `grep "SAT A: bs" $fit_file | cut -c65-78`
+    set biasB = `grep "SAT B: bs" $fit_file | cut -c65-78`
+    if(`grep "SAT A: scl" $fit_file | wc -l` > 0)then
+      set scaleA = `grep "SAT A: scl" $fit_file | cut -c65-78`
+      set scaleB = `grep "SAT B: scl" $fit_file | cut -c65-78`
+    endif
+echo Aposteriori fit file scaleA: $scaleA
+echo Aposteriori fit file biasA:  $biasA
+echo Aposteriori fit file scaleB: $scaleB
+echo Aposteriori fit file biasB:  $biasB
+endif
+
+swap:
+# based on user input, determine whether to subtract A from B or B from A to have lead-trailing satellite
+if($swap == "Y")then
+  set swap_A = 1.0
+  set swap_B = -1.0
+  set dt_A = 0
+  set dt_B = 30
+#  set dt_B = 0
+else if ($swap == "N") then
+  set swap_A = -1.0
+  set swap_B =  1.0
+  set dt_A = 30
+  set dt_B = 0
+else
+  set swap_A = 1.0
+  set swap_B = 1.0
+  set dt_A = 0.0
+  set dt_B = 0.0
+endif
+
+echo "GRACE A [X,Y] multiplied by" $swap_A dt_A = $dt_A
+echo "GRACE B [X,Y] multiplied by" $swap_B dt_B = $dt_B
+
+# PT17-521: set the file name, being either Level1B or the internal ANU file that has a quadratic removed from it.
+if ($L1B == "Y")then
+# extract out the GRACE A data. Time shift if necessary.
+  set fileA =  ACC1B_${yr}-${month}-${day}_A_${RL_num}.asc
+  grep -v ":" $fileA | grep -v HEADER | awk '{print NR + '$dt_A', ($3 * '$scaleA[1]' + '$biasA[1]' /1000000)  * 1000000000 * '$swap_A' }' > accel.A_X
+  grep -v ":" $fileA | grep -v HEADER | awk '{print NR + '$dt_A', ($4 * '$scaleA[2]' + '$biasA[2]' /1000000)  * 1000000000 * '$swap_A' }' > accel.A_Y
+  grep -v ":" $fileA | grep -v HEADER | awk '{print NR + '$dt_A', ($5 * '$scaleA[3]' + '$biasA[3]' /1000000)  * 1000000000  }' > accel.A_Z
+
+# extract out the GRACE B data.
+  set fileB =  ACC1B_${yr}-${month}-${day}_B_${RL_num}.asc
+  grep -v ":" $fileB | grep -v HEADER | awk '{print NR + '$dt_B', ($3 * '$scaleB[1]' + '$biasB[1]' /1000000)  *  1000000000 * '$swap_B' }' > accel.B_X
+  grep -v ":" $fileB | grep -v HEADER | awk '{print NR + '$dt_B', ($4 * '$scaleB[2]' + '$biasB[2]' /1000000)  *  1000000000 * '$swap_B' }' > accel.B_Y
+  grep -v ":" $fileB | grep -v HEADER | awk '{print NR + '$dt_B', ($5 * '$scaleB[3]' + '$biasB[3]' /1000000)  *  1000000000  }' > accel.B_Z
+else
+# extract out the GRACE A data. Time shift if necessary.
+  set fileA = ACC_A_${yr}-${month}-${day}.asc
+  grep -v ":" $fileA | grep -v HEADER | awk '{print NR + '$dt_A', ($2 * '$scaleA[1]' + '$biasA[1]' /1000000)  * 1000000000 * '$swap_A' }' > accel.A_X
+  grep -v ":" $fileA | grep -v HEADER | awk '{print NR + '$dt_A', ($3 * '$scaleA[2]' + '$biasA[2]' /1000000)  * 1000000000 * '$swap_A' }' > accel.A_Y
+  grep -v ":" $fileA | grep -v HEADER | awk '{print NR + '$dt_A', ($4 * '$scaleA[3]' + '$biasA[3]' /1000000)  * 1000000000  }' > accel.A_Z
+
+# extract out the GRACE B data.
+  set fileB = ACC_B_${yr}-${month}-${day}.asc
+  grep -v ":" $fileB | grep -v HEADER | awk '{print NR + '$dt_B', ($2 * '$scaleB[1]' + '$biasB[1]' /1000000)  *  1000000000 * '$swap_B' }' > accel.B_X
+  grep -v ":" $fileB | grep -v HEADER | awk '{print NR + '$dt_B', ($3 * '$scaleB[2]' + '$biasB[2]' /1000000)  *  1000000000 * '$swap_B' }' > accel.B_Y
+  grep -v ":" $fileB | grep -v HEADER | awk '{print NR + '$dt_B', ($4 * '$scaleB[3]' + '$biasB[3]' /1000000)  *  1000000000  }' > accel.B_Z
+endif
+
+
+
+
+
+######## Beta angle of GRACE B ############
+set doy = `doy $yr $month $day | head -1 | awk '{print $6}'`
+set beta = `sh_calc_beta -yr $yr -doy $doy | awk '{print substr ($0,82,6)}'`
+echo beta angle = $beta
+
+# coords where I want to write some text
+set y_text = `echo $ymax_X | awk '{print $1 + 10}'`
+set x_text = `echo $xmin $xmax  | awk '{print $1 + ($2 + $1) / 4}'`
+set xdate  = `echo $xmin $xmax  | awk '{print ($2 + $1) / 2}'`
+
+set proj = "-JX15/3.5"
+set range = "-R${xmin}/${xmax}/${ymin_X}/${ymax_X}"
+####### GRACE A. Along-track first (X)
+gmt psxy accel.A_X $proj -Wthin,255/0/0 $range  -Ba${xanot}/${yanot_X}:"Acc X (nm/s@+2@+)"::."ACC1B $yr $month $day":nesW -X3 -Y23 -P -K > $outfile
+# write the beta angle
+gmt pstext $proj $range -O -K -N -F+f+a+j << end >> $outfile
+$xmax   $y_text 12,1,0/0/0   0.0 RB Beta angle: $beta
+$xmin   $y_text 12,5,255/0/0 0.0 LB GRACE A
+$x_text $y_text 12,1,0/0/255 0.0 LB GRACE B
+$xdate  $y_text 12,1,0/0/0   0.0 LB $yr $month $day
+end
+gmt psxy accel.A_Y $proj -R${xmin}/${xmax}/${ymin_Y}/${ymax_Y}  -Wthin,255/0/0 -Ba${xanot}/${yanot_Y}:"Acc Y (nm/s@+2@+)":nesW -O -K -Y-4 >> $outfile
+gmt psxy accel.A_Z $proj -R${xmin}/${xmax}/${ymin_Z}/${ymax_Z}  -Wthin,255/0/0 -Ba${xanot}/${yanot_Z}:"Acc Z (nm/s@+2@+)":nesW -O -K -Y-4 >> $outfile
+
+##### GRACE B
+gmt psxy accel.B_X $proj -R${xmin}/${xmax}/${ymin_X}/${ymax_X} -Ba${xanot}/${yanot_X}:"Acc X (nm/s)":nesw -Wthin,0/0/255 -O -K -Y+8  >> $outfile
+gmt psxy accel.B_Y $proj -R${xmin}/${xmax}/${ymin_Y}/${ymax_Y}  -Wthin,0/0/255 -Ba${xanot}/${yanot_Y}:"Acc Y (nm/s@+2@+)":nesw -O -K -Y-4 >> $outfile
+# this one puts a label under the XYZ accelerations
+#psxy accel.B_Z $proj -R${xmin}/${xmax}/${ymin_Z}/${ymax_Z}  -Wthin,0/0/255 -Ba${xanot}:"Time (seconds)":/${yanot_Z}:"Acc Z (nm/s@+2@+)":neSw -O -K -Y-4 >> $outfile
+gmt psxy accel.B_Z $proj -R${xmin}/${xmax}/${ymin_Z}/${ymax_Z}  -Wthin,0/0/255 -Ba${xanot}:"Time (seconds)":/${yanot_Z}:"Acc Z (nm/s@+2@+)":nesw -O -K -Y-4 >> $outfile
+ 
+##### difference.
+if($swap == "Y") then
+  paste accel.B_X accel.A_X | awk '{print NR, $2 - $4}' > accel.dX
+  paste accel.B_Y accel.A_Y | awk '{print NR, $2 - $4}' > accel.dY
+  if($zmean == "Y") then
+    paste accel.B_Z accel.A_Z | awk '{print $1, ($2 + $4)/2.0}' > accel.dZ
+  else
+    paste accel.B_Z accel.A_Z | awk '{print $1, $2 - $4}' > accel.dZ
+  endif
+else
+  paste accel.B_X accel.A_X | awk '{print NR, $4 - $2}' > accel.dX
+  paste accel.B_Y accel.A_Y | awk '{print NR, $4 - $2}' > accel.dY
+  paste accel.B_Z accel.A_Z | awk '{print NR, $4 - $2}' > accel.dZ
+endif
+
+set dyanot = "4f2"
+# use this one to leave enough space fora label under the XYZ accelerations
+#psxy accel.dX $proj -R${xmin}/${xmax}/-10/10 -Ba${xanot}/${dyanot}:"Acc dX (nm/s@+2@+)":nesW -Wthin,255/0/255 -O -K -Y-5.5 >> $outfile
+gmt psxy accel.dX $proj -R${xmin}/${xmax}/-10/10 -Ba${xanot}/${dyanot}:"Acc dX (nm/s@+2@+)":nesW -Wthin,255/0/255 -O -K -Y-4   >> $outfile
+gmt psxy accel.dY $proj -R${xmin}/${xmax}/-10/10 -Ba${xanot}/${dyanot}:"Acc dY (nm/s@+2@+)":nesW -Wthin,255/0/255 -O -K -Y-4 >> $outfile
+set dyanot = "10f5"
+gmt psxy accel.dZ $proj -R${xmin}/${xmax}/-30/30 -Ba${xanot}:"Time (seconds)":/${dyanot}:"Acc dZ (nm/s@+2@+)":neSW -Wthin,255/0/255 -O -K -Y-4 >> $outfile
+
+
+# now, try to calculate the ratio of the de-meaned accelerations. We think that this should be a constant ratio of the scales.
+# need to remove the mean of the obs, perhaps after first removing the outliers. Maybe smooth it first?
+smooth accel.A_Y 100 | grep -v "There are" > accel.A_Y_smooth
+smooth accel.B_Y 100 | grep -v "There are" > accel.B_Y_smooth
+
+# plot the curves of the smoothed values.  
+#psxy accel.A_Y_smooth $proj -R${xmin}/${xmax}/${ymin_Y}/${ymax_Y} -Wthin,0/0/0 -O -K -Y+16 -Ba${xanot}/${yanot}:"Acc Y (nm/s)":nEsW >> $outfile
+#psxy accel.B_Y_smooth $proj -R${xmin}/${xmax}/${ymin_Y}/${ymax_Y} -Wthin,0/0/100 -O -K -Ba${xanot}/${yanot}:"Acc Y (nm/s)":nEsW >> $outfile
+
+# calculate the mean of each file
+set meanA = `awk '{x+=$2;next}END{print x/NR}' accel.A_Y_smooth`
+set meanB = `awk '{x+=$2;next}END{print x/NR}' accel.B_Y_smooth`
+
+# remove the mean
+cat accel.A_Y_smooth | awk '{printf "%10d %10.4f\n", $1, $2 - '$meanA' }' > accel.A_Y_demean
+cat accel.B_Y_smooth | awk '{printf "%10d %10.4f\n", $1, $2 - '$meanB' }' > accel.B_Y_demean
+
+# now, generate the ratio of the two
+paste accel.A_Y_demean accel.B_Y_demean | awk '{ if ( sqrt($4*$4) > 0.1) {printf "%10d %8.5f \n", NR, $2 / $4} } ' > scale_ratio.dat
+
+
+if ($gs_conv == "Y")then
+ gs -sDEVICE=jpeg -sOutputFile=$jpgfile -dNOPAUSE -dBATCH -dSAFER $outfile >& /dev/null
+endif
+
+
+if($plot == "Y") gs $outfile
+
+exit
+
+

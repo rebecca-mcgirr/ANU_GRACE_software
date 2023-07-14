@@ -1,0 +1,11 @@
+#!/bin/csh -f 
+
+# script to convert GSFC mascons to ANU VCV file format
+
+echo GSFC_to_apr is a program in /Users/paul/bin on zut.anu.edu.au ....
+
+echo /Users/paul/bin/GSFC_to_apr_v2.4
+echo Runstring: GSFC_to_apr mascons_ANU 140 fit/vcv
+
+exit
+

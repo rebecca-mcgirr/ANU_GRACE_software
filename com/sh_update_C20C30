@@ -1,0 +1,64 @@
+#!/bin/csh -x
+
+# script to update the GSFC file for correcting C20 and C30 for GRACE-FO. The file is found at 
+# https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/docs/TN-14_C30_C20_GSFC_SLR.txt
+
+if ($#argv == 0)then
+  echo "RUnstring: sh_update_corrections -TN13 Y/N -TN14 Y/N "
+  exit
+endif
+
+##### DEFAULTS ####
+set version = ~/ga
+set TN13 = Y
+set TN13_file = TN-13_GEOC_CSR_RL06.txt
+set TN14 = Y
+set TN14_file = TN-14_C30_C20_GSFC_SLR.txt
+###################
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -ver*:
+      set version  = $input[2]
+    breaksw
+    case -TN13:
+      set TN13  = $input[2]
+    breaksw
+    case -TN14:
+      set TN14  = $input[2]
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+# change to the location of the files
+cd ${version}/tables/data
+set today = `date +%F`
+
+
+if ($TN13 == "Y")then
+  mv ${TN13_file} ${TN13_file}'.'$today
+  
+  # get the updated file
+  echo "wget --http-user=anu_grace --http-password=rGHWTHIP@0Pwp9EnhM7"  https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/docs/$TN13_file
+  wget --http-user=anu_grace --http-password=rGHWTHIP@0Pwp9EnhM7 https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/docs/$TN13_file
+
+  # update the date of the newly downloaded file
+  touch $TN13_file  
+endif
+
+if($TN14 == "Y")then
+  mv ${TN14_file} ${TN14_file}'.'$today
+
+  # get the updated file
+  echo "wget --http-user=anu_grace --http-password=rGHWTHIP@0Pwp9EnhM7"  https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/docs/$TN14_file
+  wget --http-user=anu_grace --http-password=rGHWTHIP@0Pwp9EnhM7 https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/docs/$TN14_file
+
+  # update the date of the newly downloaded file
+  touch $TN14_file
+  
+endif
+

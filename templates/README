@@ -1,0 +1,9 @@
+# File containing changes made in this directory.
+#
+# Started by P. Tregoning
+# 24 July 2019
+
+gracefit.cmd.template_GRACE    :  added kb_cos_fft option for removing high-freq noise from inter-satellite obs		: Tregoning 190674
+gracefit.cmd.template_GRACEFO  :  added kb_cos_fft option for removing high-freq noise from inter-satellite obs		: Tregoning 190724
+GRACE.input.template		   :  changed MOD_DEALIAS from AOD05 to AOD06											: McQueen 200608
+GRACE_FO.input.template		   :  changed ATM_TIDE from N to Y														: McQueen 200608

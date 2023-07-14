@@ -1,0 +1,28 @@
+!   input.h90 --  Variables and parameters used to read in files and commands
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!     File unit numbers
+
+    integer*4, parameter               :: LUCMD = 10                   ! Command file unit number
+! PT131015: increase LUGT by 10 to avoid clash with the GRACEFIT.status file with 101 unit number
+! PT180723: changed LUGT to LUGTORB
+    integer*4, parameter, dimension(4) :: LUGTORB = [110, 111, 112, 113]  ! GTORB file unit numbers
+    integer*4, parameter, dimension(2) :: LUGN = [150, 151]            ! GNV1B file unit numbers
+    integer*4, parameter, dimension(2) :: LUAC = [170, 171]            ! ACC1B file unit numbers
+    integer*4, parameter, dimension(2) :: LUTH = [190, 191]            ! THR1B file unit numbers
+    integer*4, parameter               :: LUKB =  300                  ! KBR1B file unit number
+    integer*4, parameter               :: LULRI=  310                  ! LRI1B file unit number
+    integer*4, parameter               :: iNUT =  900                  ! nutation file unit number
+    integer*4, parameter               :: iUT1 =  901                  ! ut1 file unit number
+    integer*4, parameter               :: iPOLE = 902                  ! pole file unit number
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!   Other constants
+! PT180625: we can't force this to be 02 anymore. GRACE FO could be 00
+    integer*4 :: RL_NUM    ! version of L1B files being used
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

@@ -1,0 +1,22 @@
+#!/bin/csh -f
+
+# script to invoke Seb's python version for plotting the difference between h5 orbits
+#
+# P. Tregoning
+# 8 July 2019
+
+set version = "~/ga"
+
+if ($#argv == 0)then
+  echo "sh_plot_GTORB_diff_h5 file1.h5 file2.h5 [prefit residual file]"
+  exit
+endif
+
+set file1 = $1
+set file2 = $2
+set prefit_file = $3
+
+python3 $version/com/plot_gtorbdiff.py $file1 $file2 $prefit_file &
+
+
+

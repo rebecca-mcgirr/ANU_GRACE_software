@@ -1,0 +1,74 @@
+#!/bin/csh -f
+
+# script to plot the correlation matrix written out by addnorm in the file addnorm.corrl.
+# The format is simple:
+# Line 1    : "Correlation matrix"
+# Lines 2-> : row    correlation values (complete line, not lower-triangular
+
+# there is no attempt in the addnorm file to indicate which lines refer to which 
+# parameters, nor to indicate how many nor what they are. The user will just
+# have to know what they are doing !
+
+# P. Tregoning
+# 7 February 2019
+set version = "~/gt"
+
+if ($#argv == 0 ) then
+  echo "sh_plot_addnorm_correlation file [start_param end_param]"
+  echo "default is to plot the whole lower-triangular matrix but a subset can be done"
+  exit
+endif
+
+set corr_file = $1
+if ($#argv == 3)then
+  set start_param = $2
+  set end_param = $3
+else
+  set start_param = 1
+  set end_param = `wc -l $corr_file | awk '{print $1 - 1}'`
+endif
+
+echo Will plot correlations between parameters $start_param and $end_param
+
+#goto plot
+
+# ok, so now we need to deconstruct the lower-triangular matrix of the correlation matrix to make it a series of
+# points with XY coords (being param1, param2)
+echo $version/util/lowertri2points $corr_file $end_param
+$version/util/lowertri2points $corr_file $end_param > points.tmp
+
+####################################
+plot:
+set outfile = addnorm_correl.ps
+set proj = "-JX15/15"
+set range = `echo $start_param $end_param | awk '{printf "-R%6.6d/%6.6d/%6.6d/%6.6d", $1 - 1, $2 + 1, $1 - 1, $2 + 1}'`
+echo $range
+makecpt -Cpolar  -T-1.0/1.0/0.01 > points.cpt
+
+# work out how large to make the squares, based on the number of points
+if ($end_param < 13)then
+  set square_size = 1.5
+  set anot = "-B3f1:."$corr_file":nESw"
+else if ($end_param < 25)then
+  set square_size = 0.5
+  set anot = "-B3f1nESw"
+else if ($end_param < 5000)then
+  set square_size = 0.1
+  set anot = "-Ba1000nESw"
+else
+  set square_size = 0.01
+  set anot = "-Ba1000nESw"
+endif
+
+echo psxy points.tmp $proj $range -Cpoints.cpt $anot -Ss$square_size
+psxy points.tmp $proj $range -Cpoints.cpt $anot -Ss$square_size -X3 -Y5 -K -P > $outfile
+
+# plot the legend
+psscale -Cpoints.cpt -D7.5/-1/15/0.25h -Ba0.2f0.1:Correlation: -O -K >> $outfile
+
+gs $outfile
+
+
+
+
+

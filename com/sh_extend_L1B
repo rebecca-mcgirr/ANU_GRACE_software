@@ -1,0 +1,141 @@
+#!/bin/csh -f
+
+# try to write a simple script that extends L1B data, including updating the header information
+#
+# P. Tregoning
+# 15 May 2022
+
+set version = ~/ga
+
+if ($#argv == 0)then
+  echo "sh_extend_L1B YYYY MM DD ACC sat RL_num nsecs   where 'nsecs' is the number fo seconds by which to extend the data and the beginning/end"
+  exit
+endif
+
+set year = $1
+set month = $2
+set day = $3
+set type = $4
+set sat = $5
+set RL_num = $6
+set nsecs = $7
+
+
+# find out the gracesconds for the start time
+set initial_gracesecs = `$version/com/sh_graceseconds $year $month $day 00 00 00 | awk '{print $1}'`
+
+# calculate the start time and end time
+set start_secs = `echo $initial_gracesecs $nsecs | awk '{print $1 - $2}'`
+set   end_secs = `echo $initial_gracesecs $nsecs | awk '{print $1 + 86400 + $2}'`
+echo start and end seconds $start_secs $initial_gracesecs $end_secs
+
+# get the YMD for the day before and after
+set ymd_before = `$version/com/sh_gracesecs_to_ymdhms $start_secs | cut -c1-10 | sed s/"-"/" "/g`
+set ymd_after = `$version/com/sh_gracesecs_to_ymdhms $end_secs | cut -c1-10 | sed s/"-"/" "/g`
+echo $ymd_before $ymd_after
+
+# create file names for the day plus the days before and after
+if ($type == "SCA" || $type == "GNI" || $type == "ACT")then
+  set file_before = ${type}1B_${ymd_before[1]}-${ymd_before[2]}-${ymd_before[3]}_${sat}_${RL_num}.txt
+  set file        = ${type}1B_${year}-${month}-${day}_${sat}_${RL_num}.txt
+  set file_after  = ${type}1B_${ymd_after[1]}-${ymd_after[2]}-${ymd_after[3]}_${sat}_${RL_num}.txt
+
+  set output_file = ${type}1B_${year}-${month}-${day}_${sat}_${RL_num}_extended.txt
+
+else
+  echo "file type " $type "not coded"
+  exit
+endif
+
+echo Files to merge: $file_before $file $file_after
+
+
+################################
+###
+###  header info to change for output
+###
+################################
+# number of header lines
+set nheader_orig = `awk '/End of YAML header/ {print NR}' $file`
+
+# number of obs in original file
+set nobs_orig = `tail -n+3 $file | tail -1 | awk '{print $2}'`
+
+# start_time_epoch_secs and stop_time_epoch_secs
+set start_time_hdr = `grep start_time_epoch_secs $file`
+set stop_time_hdr  = `grep stop_time_epoch_secs $file`
+
+
+################################
+###
+###  merge the observations
+###
+################################
+  # day before
+  cat $file_before | awk '{if (substr($0,10,1) == " " && $1 > '$start_secs'-1) {print $0}}' > obs.tmp
+echo $file_before 
+tail obs.tmp
+  # day of
+  cat $file        | awk '{if (substr($0,10,1) == " " && substr($0,12,1) == " " && (substr($0,11,1) == "D" || substr($0,11,1) == "C") ) {print $0}}' >> obs.tmp
+echo $file 
+tail obs.tmp
+  # day after
+  cat $file_after  | awk '{if (substr($0,10,1) == " " && (substr($0,11,1) == "D" || substr($0,11,1) == "C") && $1 <= '$end_secs') {print $0}}' >> obs.tmp
+echo $file_after 
+tail obs.tmp
+
+  # how many obs?
+  set nobs = `wc -l obs.tmp | awk '{print $1}'`
+  echo There are $nobs observations in the extended file
+
+  # date of first observation?
+  set first_gracesecs = `head -1 obs.tmp | awk '{print $1}'`
+  set new_start = `$version/com/sh_gracesecs_to_ymdhms $first_gracesecs `
+  echo New start time of extended file: $new_start
+
+  # date of last observation?
+  set last_gracesecs = `tail -1 obs.tmp | awk '{print $1}'`
+  set new_end = `$version/com/sh_gracesecs_to_ymdhms $last_gracesecs `
+  echo "New end   time of extended file:" $new_end
+
+  # new start_time_hdr
+  set start_time_hdr_new = "start_time_epoch_secs: "$first_gracesecs
+
+  # new stop_time_hdr
+  set stop_time_hdr_new = "stop_time_epoch_secs: "$last_gracesecs
+
+
+################################
+###
+###  output file
+###
+################################
+# first two lines
+head -2 $file > $output_file
+
+# now the number of observations
+echo "    num_records: "$nobs  >> $output_file
+
+# output the remainder of the header
+set nheader_new = `echo $nheader_orig | awk '{print $1 - 3}'`
+tail -n+4 $file | head -$nheader_new  | sed s/"$start_time_hdr"/"$start_time_hdr_new"/ | sed s/"$stop_time_hdr"/"$stop_time_hdr_new"/>> $output_file
+
+# add the observations
+cat obs.tmp >> $output_file
+
+
+echo All done
+ls -l $output_file
+
+
+
+
+
+
+
+
+
+
+
+
+  

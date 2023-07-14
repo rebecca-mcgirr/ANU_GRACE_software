@@ -1,0 +1,130 @@
+#!/bin/csh -f
+
+# script to plot the difference in mascon estimates between two fit files
+
+if ($#argv == 0 ) then
+  echo "sh_diff_mascons -f truth_7sep.vcv addnorm.out  -y miny maxy step_y -unc 0.20 0.40 0.1 [where the last three numbers are min/max/interval for uncertainties] -gr plt_test.kb blah.kb "
+  exit
+endif
+
+##################### SET DEFAULT VALUES    #######################
+set masconfile = "~/gg/grace/tables/mascon_primary"
+set min_unc = 0.1
+set max_unc = 0.65
+set unc_int = 0.05
+set ymin = -1025
+set ymax = 1025
+set step_y = 50
+set cutoff = -10.00000001
+set yanot = "blah"
+set legend = "blah"
+set apriori = "N"
+set apr_text = " "
+set groundtrack_files = ""
+set plot = "Y"
+set convert = "N"
+set big = "N"
+set groundtrack_files = " "
+set addnorm = "N"
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set est_file1  = $input[2] ; shift argv
+      set est_file2  = $input[3] ; shift argv
+    breaksw
+    case -m:
+      set masconfile  = $input[2] ; shift argv
+    case -vcv:
+      set vcv = "Y"
+    breaksw
+    case -addnorm:
+      set addnorm = "Y"
+    breaksw
+    case -cutoff:
+      set cutoff  = $input[2] ; shift argv
+    breaksw
+    case -unc:
+      set min_unc = $input[2] ; shift argv   
+      set max_unc = $input[3] ; shift argv
+      set unc_int = $input[4]; shift argv
+    breaksw
+    case -y:
+      set ymin = $input[2]   ; shift argv
+      set ymax = $input[3] ; shift argv
+      set step_y = $input[4]; shift argv
+    breaksw      
+    case -yanot:
+      set yanot  = $input[2] ; shift argv
+    breaksw
+    case -gr*:
+#      set groundtrack_file  = $input[2] ; shift argv
+      set groundtrack_files = ( `echo $argv | cut -d- -f2`); shift groundtrack_files
+    breaksw
+    case -leg*:
+      set legend  = $input[2] ; shift argv
+    breaksw
+    case -apr*:
+      set apriori  = "Y"
+      set apr_text = "a priori"
+    breaksw
+    case -plot:
+      set plot  = $input[2] ; shift argv
+    breaksw
+    case -convert:
+      set convert  = $input[2] ; shift argv
+    breaksw
+    case -big:
+      set big  = $input[2] ; shift argv
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+
+if($yanot == "blah")set yanot = `echo $step_y | awk '{printf " %4df%3.3d\n", $1 * 3, $1}'`
+set outfile = "diff_mascons.ps"
+
+if ($groundtrack_files != " ")then
+   set groundtrack_files = "-gr "$groundtrack_files
+endif
+
+# get the mascon entries for each file
+# PT150813: check whether the file is a vcv file or not (do a search for vcv in the string)
+if(`echo $est_file1 | awk 'BEGIN {FS=".vc"} {print $2}'` == "v")then   # it is a vcv file
+  echo "Getting mascons values from VCV file 1" $est_file1
+  grep " MC" $est_file1 | awk '{print $0, 0.01}' > tmp.file1
+else
+  echo "Getting mascons values from fit file 1" $est_file1
+  grep " MC" $est_file1 > tmp.file1
+endif
+if(`echo $est_file2 | awk 'BEGIN {FS=".vc"} {print $2}'` == "v")then   # it is a vcv file
+  echo "Getting mascons values from VCV file 2" $est_file2
+  grep " MC" $est_file2 | awk '{print $0, 0.01}' > tmp.file2
+else
+  echo "Getting mascons values from fit file 2" $est_file2
+  grep " MC" $est_file2 > tmp.file2
+endif
+
+\rm -f diff_mascons.dat
+# difference them and output
+if($addnorm == "N")then
+  paste tmp.file2 tmp.file1 | awk '{printf "%5.0f. %6s %4s %28.5f %11.5f %18.5f %11.5f \n", $1, $2, $3, $4, $6 - $14, $6 - $14, $6 }' > diff_mascons.dat
+else
+  echo Derive the difference between two addnorm files
+  paste tmp.file2 tmp.file1 | awk '{printf "%5.0f. %6s %4s %28.5f %11.5f %18.5f %11.5f \n", $1, $2, $3, $4, $6 - $13, $6 - $13, $6 }' > diff_mascons.dat
+endif
+minmax diff_mascons.dat
+echo Calculate RMS between files $est_file1 $est_file2 
+sh_mascon_rms diff_mascons.dat
+
+# and plot
+# PT161005: changed the order of files for the header to represent the actual order of the computation. File2 minus File1.
+set header = `echo $est_file2 $est_file1 | awk '{print $1"-"$2}'`
+
+echo sh_plot_mascons -f diff_mascons.dat -y $ymin $ymax $step_y -unc $min_unc $max_unc $unc_int  -yanot $yanot -header $header $groundtrack_files
+sh_plot_mascons -f diff_mascons.dat -y $ymin $ymax $step_y -unc $min_unc $max_unc $unc_int   -yanot $yanot -header $header $groundtrack_files
+

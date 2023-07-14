@@ -1,0 +1,41 @@
+#!/bin/csh -f
+
+set version = ~/gt
+
+if ($#argv == 0 ) then
+  echo Level-1B location is:
+  echo "GRACE:    ftp://podaac-ftp.jpl.nasa.gov/allData/grace/L1B/JPL/RL01/2011/"
+  echo "GRACE FO: https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/L1B/JPL/RL04/2019/*"
+  echo "runstring: sh_get_level1B_https  2019 05 24 RL04 [LRI]"
+  exit
+else
+  set year = $1
+  set month = $2
+  set day = $3
+  set RL_num = `echo $4 | cut -c3-4`
+endif
+if($5 == "LRI")then
+  set extra_flag = "LRI"
+else if ($5 == "ACX")then
+  set extra_flag = "ACX"
+else
+  set extra_flag = "noLRI"
+endif
+
+if ($year < 2018)then
+  set file = `echo $RL_num $year $month $day | awk '{printf "https://podaac-tools.jpl.nasa.gov/drive/files/allData/grace/L1B/JPL/RL%2.2d/ASCII/%4d/grace_1B_%4d-%2.2d-%2.2d_RL%2.2d.ascii.tar.gz", $1, $2, $2, $3, $4, $1}'`
+else
+  # Old version using the podaac https address
+  # set file = `echo $RL_num $year $month $day $lri_flag | awk '{printf "https://podaac-tools.jpl.nasa.gov/drive/files/allData/gracefo/L1B/JPL/RL%2.2d/ASCII/%4d/gracefo_1B_%4d-%2.2d-%2.2d_RL%2.2d.ascii.%s.tgz", $1, $2, $2, $3, $4, $1, $5}'`
+  # PT220503: using the new cloud address
+  set file = `echo $RL_num $year $month $day $RL_num $extra_flag | awk '{printf "https://archive.podaac.earthdata.nasa.gov/podaac-ops-cumulus-protected/GRACEFO_L1B_ASCII_GRAV_JPL_RL%2.2d/gracefo_1B_%4d-%2.2d-%2.2d_RL%2.2d.ascii.%s.tgz",$5, $2, $3, $4, $5, $6}'`                          
+endif
+
+# we now need a username and password to log in to get the data. Use 
+
+echo wget  $file
+#wget --http-user=anu_grace --http-password=rGHWTHIP@0Pwp9EnhM7 $file
+wget $file
+
+#wget --http-user=paul.tregoning@anu.edu.au --http-password=12April2022 $file
+

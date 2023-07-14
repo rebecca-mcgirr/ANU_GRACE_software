@@ -1,0 +1,43 @@
+#!/bin/csh -f
+
+if ($#argv == 0) then
+  echo "Runstring: sh_plot_AHK_temps YYYY MM DD"
+  exit
+endif
+
+set version = ~/gt
+
+set year = $1
+set month = $2
+set day = $3
+
+# get the GRACE seconds for the start of the day
+set gracesec_start = `doy $year $month $day | tail -1 | awk '{print int($6)}'`
+
+# extract the AHK files
+${version}/com/sh_extract_level1B $year $month $day AHK RL02
+
+# now extract the temperatures for GRACE A
+set file_A = "AHK1B_"${year}"-"${month}"-"${day}"_A_02.asc"
+set n_hdr = `grep "NUMBER OF HEADER RECORDS" $file_A | awk '{print $6}'`
+tail -n+$n_hdr $file_A | awk '{if (NF > 16 && $1 >= '$gracesec_start') {print $1 - '$gracesec_start', $15, $16, $17, $18} }' > file_A.temps
+
+# now extract the temperatures for GRACE B
+set file_B = "AHK1B_"${year}"-"${month}"-"${day}"_B_02.asc"
+set n_hdr = `grep "NUMBER OF HEADER RECORDS" $file_B | awk '{print $6}'`
+tail -n+$n_hdr $file_B | awk '{if (NF > 16 && $1 >= '$gracesec_start') {print $1 - '$gracesec_start', $15, $16, $17, $18} }' > file_B.temps
+ 
+
+plot:
+set outfile = AHK_${year}_${month}_${day}.ps
+set proj = "-JX15/10"
+set range = "-R0/87000/10/60"
+
+gmt psxy file_A.temps $proj $range  -Wthick,red -Ba10000f5000/10f5:"Temperature (C)"::."$year $month $day":-neSW -X2 -Y10 -P -K > $outfile
+gmt psxy file_A.temps $proj $range  -Wthick,green -i0,2 -O -K >> $outfile
+gmt psxy file_A.temps $proj $range  -Wthick,blue  -i0,3 -O -K >> $outfile
+gmt psxy file_A.temps $proj $range  -Wthick,black -i0,4 -O -K >> $outfile
+
+gs $outfile
+
+

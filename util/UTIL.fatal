@@ -1,0 +1,6 @@
+FATAL  :200803:1452:44.0 UTIL/gia_over_oceans: Runstring: gia_over_oceans GIA.sph mascons_stage5 grace.list
+FATAL   211220:0950:52.0: UTIL/range_accel: Runstring: range_accel kb_file output_file prefit/postfit
+FATAL  :220113:1015:44.0 UTIL/extract_ocean_msc: Runstring: extract_ocean_msc mascon_infile mascon_outfile
+FATAL   220113:1016:49.0: UTIL/extract_ocean_msc: Runstring: extract_ocean_msc mascon_infile mascon_outfile
+FATAL   220214:1623:49.0: UTIL/dist_deriv: Error opening GNV1B file (file GNI1B_2020-06-05_C_04.txt)
+FATAL   220914:1128:53.0: UTIL/altgrid_to_primary: Runstring: altgrid_to_primary altgrid.dat mascons_stage5_V006_200km altgrid.lookup

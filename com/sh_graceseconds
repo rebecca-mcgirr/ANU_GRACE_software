@@ -1,0 +1,51 @@
+#!/bin/csh -f
+
+# script to calculate the number of grace seconds (seconds since 2000-01-01 12:00:00) of an input date/time
+# Done using the "date +%s" unix command, which returns seconds since 1970-01-01
+#
+# P. Tregoning
+# 13 January 2022
+
+if ($#argv == 0) then
+  echo sh_graceseconds YYYY MM DD HR MM sec
+  echo e.g. sh_graceseconds 2010 09 01 05 00 03.5
+  exit
+endif
+
+setenv TZ UTC
+set yr = $1
+set month = $2
+set day = $3
+set hr = 00
+set min = 00
+set sec = 00
+
+if ($#argv > 3)set hr = $4
+if ($#argv > 4)set min = $5
+if ($#argv > 5)set sec = $6
+
+
+
+# get the number of seconds between 1970-01-01 and 2000-01-02 12:00:00
+set secs_grace0 = `date -d 2000-01-01T12:00:00 +%s `
+
+# now, get the number of seconds since 1970-01-01 for the requested day
+set secs_requested_date = `date -d ${yr}-${month}-${day}T${hr}:${min}:${sec} +%s `
+set gracesecs = `echo $secs_requested_date $secs_grace0 | awk '{print $1 - $2}'`
+
+# the resulting answer is 3600 seconds too large for dates in each year before some date in April. 
+# I don't know why, but will subtract the relevant number from the answer
+set secs_correction = 0
+if ($month < 1)@ gracesecs = $gracesecs - 3600
+set day_of_year = `date -d ${yr}-${month}-${day} +%j`
+
+set decimal_year = `echo $yr $day_of_year | awk '{printf "%10.4f\n",$1 + $2 / 365.}'`
+echo $gracesecs Graceseconds for epoch: $yr $month $day $hr $min $sec day of year:  `date -d ${yr}-${month}-${day} +%j` decimal_year $decimal_year
+
+set debug = "F"
+if($debug == "T")then
+  echo secs_grace0 = $secs_grace0
+  echo secs_requested_date = $secs_requested_date  
+endif
+
+

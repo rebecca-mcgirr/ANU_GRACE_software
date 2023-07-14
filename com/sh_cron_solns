@@ -1,0 +1,87 @@
+#!/bin/csh -f
+
+# script to check whether GRACE-FO data are there and that a solution can be run. Requirements are:
+#
+# 1. the daily solution hasn't already been run
+# 2. the L1B data exist already in the archive on mizuchi
+#
+# P. Tregoning
+# 14 February 2022
+
+# PT220606: command line arguments are: 
+#       1-3:     YYYY MM DD of day for which to start the processing
+#         4:     stop after processing just the requested day
+
+set logfile = "/home/geod/pault/cronjobs/"`date -u +%F`'.log'
+
+# set up some variables 
+set RL_num = RL04
+set version = /Mdata/GRACE/software/active
+
+# set the apriori model for the mascons
+# PT220125: first attempt at using GRACE-FO data as part of the a priori model
+#set msc_apriori_model = ~/ga/tables/apriori_2002-2010_2021.txt
+# PT220228: updated to include the solution for January 2022 (note 2011-2020 data excluded at present from the a priori model)
+set msc_apriori_model = apriori_2002-2010_2021-2022.txt
+
+
+# get the current year, month, day
+set year = `date -u +%G`
+set month = `date -u +%m`
+set day = `date -u +%e`
+
+
+## first, find the most recent day for which a solution been completed
+#set most_recent = `ls -lt /srv/scratch/mizuchi/pault/GRACE-FO/$year/*/*.fit | head -1 | cut -c87-96 | sed s/"-"/" "/g`
+#echo Most recent fit file soln found is for day $most_recent
+
+# now, check whether the next day of L1B data exist
+# PT220510: use the command line arguments /Mdata/GRACE/software/active/com/sh_update_weekly_L1B
+#set next_day = `${version}/com/sh_increment_ymd $most_recent`
+set next_day = ($1 $2 $3)
+set day_after = `${version}/com/sh_increment_ymd $next_day`
+
+set only_one_day = $4
+echo $next_day $day_after
+
+
+if (-e /Mdata/GRACE/L1B/$RL_num/$next_day[1]/gracefo_1B_$next_day[1]-$next_day[2]-$next_day[3]_RL04.ascii.noLRI.tgz && -e /Mdata/GRACE/L1B/$RL_num/$day_after[1]/gracefo_1B_$next_day[1]-$day_after[2]-$day_after[3]_RL04.ascii.noLRI.tgz) then
+  echo L1B data found to process day ${next_day}. Commence processing.
+  
+  # call the sh_iterate script to run the daily solution
+  mkdir /srv/scratch/mizuchi/pault/GRACE-FO/$next_day[1]/$next_day[1]-$next_day[2]-$next_day[3] >& /dev/null
+  cd /srv/scratch/mizuchi/pault/GRACE-FO/$next_day[1]/$next_day[1]-$next_day[2]-$next_day[3]
+  
+  
+  # run the daily solution
+  if (! -e $logfile)then
+    ${version}/com/sh_iterate_220113 -t $next_day -mission 1 -two_iter3 Y -msc_apriori_model $msc_apriori_model  > $logfile
+  else
+    ${version}/com/sh_iterate_220113 -t $next_day -mission 1 -two_iter3 Y -msc_apriori_model $msc_apriori_model >> $logfile
+  endif
+  
+  # now call this script again, recursively, to see whether the next day can also be processed
+  # PT220304: only call it if the next two days of L1B exist
+  set next_day = `${version}/com/sh_increment_ymd $next_day`
+  set day_after = `${version}/com/sh_increment_ymd $next_day`
+
+  # PT220606: only do this if the 4th command line argument is not "stop". That is, stop processing if we want only one day processed.
+  if (-e /Mdata/GRACE/L1B/$RL_num/$next_day[1]/gracefo_1B_$next_day[1]-$next_day[2]-$next_day[3]_RL04.ascii.noLRI.tgz && -e /Mdata/GRACE/L1B/$RL_num/$day_after[1]/gracefo_1B_$next_day[1]-$day_after[2]-$day_after[3]_RL04.ascii.noLRI.tgz && only_one_day != "stop") then
+    $version/com/sh_cron_solns $next_day "continue"
+    exit  
+  endif
+
+else
+  if (! -e $logfile)then
+    echo No additional L1B data found. Last day processed is: $most_recent  > $logfile
+  else
+    echo No additional L1B data found. Last day processed is: $most_recent >> $logfile
+  endif
+  exit
+    
+endif
+
+
+
+
+

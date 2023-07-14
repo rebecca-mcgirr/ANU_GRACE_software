@@ -1,0 +1,106 @@
+#!/bin/csh -f
+
+# script to generate an estimate of EWH on our primary mascons given a file of kbra prefit residuals. Not sure of the scaling factor 
+# to go from nm/s^2 to mm of EWH but I guess we'll work it out ....
+#
+# P. Tregoning
+# 25 July 2017
+
+if ($#argv == 0 ) then
+  echo "sh_msc_from_kbra -kb all.kb -m mascons_stage4 [-scl scale_factor -plot Y/N]"
+  exit
+endif
+
+###################### DEFAULTS ###################################
+set plot = "Y"
+set scl = 1.0
+set mascon_file = mascons_stage4
+set kb_file = all.kb
+set version = ~/gt
+
+###################################################################
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -kb:
+      set kb_file  = $input[2]
+    breaksw
+    case -m:
+      set mascon_file  = $input[2]
+    breaksw
+    case -plot:
+      set plot  = $input[2]
+    breaksw
+    case -scl:
+      set scl  = $input[2]
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+
+######################################################################
+### generate range accelerations from prefit range rate values
+${version}/util/range_accel $kb_file ${kb_file}.acc prefit 
+
+### extract range acceleration residuals from kb file
+tail -n+7 ${kb_file}.acc | awk '{if (sqrt($12*$12) < 0.04) {print $4, $3, $12 * 1000}}' > kbra.dat
+
+### make a grid of the kbra residuals
+gmt blockmedian kbra.dat -I0.5 -V -Rg > kbra_median.dat
+gmt surface -Rg kbra_median.dat -Gkbra.grd  -V -I0.5 
+######################################################################
+
+
+######################################################################
+# generate EWH values on primary mascons
+  # make a list of primary mascon coordinates
+  cat $mascon_file | awk '{if (substr($0,8,3) == "  P") {print $6, $5}}' > mascon.crds
+  gmt grdtrack -Gkbra.grd mascon.crds | awk '{print $1, $2, $3 * -25.0 }' > mascons.dat 
+
+  # write out the mascon EWH values in gracefit VCV format
+  set nmsc = `wc -l mascons.dat | awk '{print $1}'`
+  set EWH = `cat mascons.dat | awk '{print $3 / 1000.}' `
+
+#    25. MC0001 (Gt)                    0.0000000       -0.141524382      0.0287645
+  echo Output mascon values in file mascons_kbra.vcv
+  echo "mascons derived from prefit range acceleration residuals in file" $kb_file > mascons_kbra.vcv
+  set i = 1
+  while ($i <= $nmsc)
+    echo $i $EWH[$i] | awk '{printf "%5d. MC%4.4d (Gt)          %19.7f %18.9f %14.7f\n",24 + $1, $1, 0.0, $2, 0.01, 0.01 }' >> mascons_kbra.vcv
+    @ i = $i + 1
+  end
+######################################################################
+
+
+
+#######################################################################
+plot:
+set proj = "-JR30/15"
+set range = "-Rg"
+set outfile = kbra.ps
+
+gmt makecpt -Chaxby -T-15/15/0.5 > kbra.cpt
+gmt makecpt -Chaxby -T-802.5/802.5/5 -I > msc.cpt
+
+# plot the gridded kbra residuals
+gmt grdimage kbra.grd $proj $range -Ba1000:."range acceleration prefit residuals":nesw -X2 -Y18 -P -K -Ckbra.cpt > $outfile
+gmt pscoast $proj $range -Wthin,100/100/100 -O -K >> $outfile
+gmt psscale -Ckbra.cpt -D8/-1/15/0.5h -Ba10f5:"nm/s@+2@+": -O -K >> $outfile
+
+# plot the primary mascon values as circles
+gmt psxy mascons.dat $proj $range -Ba1000:."mascon EWH values":nesw -Sc0.1 -Cmsc.cpt -O -K -Y-15 >> $outfile
+gmt pscoast $proj $range -Wthin,100/100/100 -O -K >> $outfile
+gmt psscale -Cmsc.cpt -D8/-1/15/0.5h -Ba400f200:"EWH (mm)": -O -K >> $outfile
+
+
+
+gs $outfile
+
+
+ 
+
+

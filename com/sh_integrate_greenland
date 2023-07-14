@@ -1,0 +1,46 @@
+#!/bin/csh -f
+
+# I'm sick of doing cut/paste to calculate this for a single day ......
+
+set fit_file = $1
+set year = $2
+set month = $3
+
+set mascon_file = /home/geod/pault/gg/grace/tables/mascons_stage4_V002
+set version = ~/gt
+echo Extract information on Greenland primary mascons
+if($4 != "skip_grab")then
+  echo $version/util/grab_mascons $mascon_file junk mascon.polygons Grnld2 Land -10. "| grep "Primary mascon  " | awk '{if ($3 > 2) {print $3, $9}}' > GRN_msc.tmp"
+  $version/util/grab_mascons $mascon_file junk mascon.polygons Grnld2 Land -10. | grep "Primary mascon  " | awk '{if ($3 > 2) {print $3, $9}}' > GRN_msc.tmp
+endif
+set prim_GRN    = `cat GRN_msc.tmp | awk '{printf "%5.5d\n", $1}'`
+set area_GRN    = `cat GRN_msc.tmp | awk '{printf "%15.6f\n", $2/1.e6}'`
+set n_GRN       = `echo $prim_GRN    | wc -w`
+
+
+# now integrate it up for this single fit file
+set epoch = ${year}_${month}
+set ymd = `echo $epoch | awk '{print substr($0,1,4), substr($0,6,2), 15}'`
+set dec_yr = `doy $ymd | tail -1 | awk '{print $3}'`
+
+set imsc = 1
+\rm GRN_${epoch}.dat >& /dev/null ; touch GRN_${epoch}.dat
+while ($imsc <= $n_GRN)
+  grep MC$prim_GRN[$imsc] $fit_file | awk '{print $6, $7,  '$area_GRN[$imsc]'}' >> GRN_${epoch}.dat
+  set imsc = `echo $imsc | awk '{printf "%5.5d", $1 + 1}'`
+end
+set EWH = `weighted_sum GRN_${epoch}.dat  | tail -1 | awk '{print $5 * 1.e3}'`
+
+echo $dec_yr $EWH GRN $ymd[1] $ymd[2] | awk '{print $1, $2, $3, $4, $5}'
+
+# get the lat/lon coords of all the primary mascons considered to be in Greenland
+set imsc = 1
+\rm GRN_msc.lonlat ; touch GRN_msc.lonlat
+while ($imsc <= $n_GRN)
+  set tmp_msc = `echo $prim_GRN[$imsc] | awk '{printf "%5d\n", $1}'`
+#  echo `grep " "$tmp_msc"  P" $mascon_file | awk '{print $6, $5, $8/1.e6, $1}'`
+  grep " "$tmp_msc"  P" $mascon_file | awk '{print $6, $5, $8/1.e6, $1}' >> GRN_msc.lonlat
+  @ imsc = $imsc + 1
+end
+
+

@@ -1,0 +1,79 @@
+#!/bin/csh -f
+
+# script to evaluate an apriori.txt file and plot it spatially
+#
+# P. Tregoning
+# 2 July 2022
+
+if ($#argv == 0)then
+  echo "sh_plot_apriori -f apriori.txt -mascon_file mascons_stage5_V006_300km -t YYYY MM DD -bit_map 3 -name b8z_noad"
+  exit
+endif
+
+##############  defaults #######
+set version = ~/ga
+set mascon_file = ~/ga/tables/mascons_stage5_V006_200km
+set apriori_file = ~/ga/tables/apriori_2002-2010_2021-2022.txt
+set year = 9999
+set month = 99
+set day = 99
+set ymin = -900
+set ymax = 900
+set y_step = 10
+set bit_map = 3
+set plot = "Y"
+set name = ""
+#########################
+
+##################### DECIPHER COMMAND LINE #######################
+while ($#argv > 0 )
+  set input = ( $argv )
+  switch($input[1])
+    case -f:
+      set apriori_file  = $input[2]
+    breaksw
+    case -mascon_file:
+      set mascon_file  = $input[2]
+    breaksw
+    case -y:
+      set ymin = $input[2] ; shift argv  
+      set ymax = $input[3] ; shift argv
+      set y_step = $input[4] ; shift argv
+    breaksw
+    case -yanot:
+      set yanot = $input[2]
+    breaksw
+    case -plot:
+      set plot = $input[2]
+    breaksw
+    case -t:
+      set year  = $input[2] ; shift argv  
+      set month = $input[3] ; shift argv
+      set day   = $input[4] ; shift argv
+    breaksw
+    case -bit*:
+      set bit_map = $input[2]
+    breaksw
+    case -name:
+      set name = "_"$input[2]
+    breaksw
+ endsw
+  if ( $#argv > 0 ) shift argv
+end
+alldone:
+######################################################################
+
+# first, run apriori_mascons to create a vcv file for the requested day
+echo $version/util/apriori_mascons $mascon_file $apriori_file $year $month $day $bit_map
+$version/util/apriori_mascons $mascon_file $apriori_file $year $month $day $mascon_file $bit_map
+if ($name != "")then
+  echo mv msc_apriori_${year}_${month}.vcv msc_apriori_${year}_${month}${name}.vcv
+  mv msc_apriori_${year}_${month}.vcv msc_apriori_${year}_${month}${name}.vcv
+endif
+
+
+# now, plot the file using sh_plot_mascon_file
+$version/com/sh_plot_mascon_file -f $mascon_file -vcv -fit msc_apriori_${year}_${month}${name}.vcv -plot $plot -n_decimate 10
+
+
+
