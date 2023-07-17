@@ -1,1 +1,14 @@
+# ignore DS_Store
 .DS_Store
+
+# ignore untested dirs
+util/
+com_c1/
+python_codes/
+
+# ignore all object and mod files 
+mod_subs/*.o
+mod_subs/*.mod
+
+# ignore untarred GraceReadSW package
+GraceReadSW/RELEASE_2010-03-31/
