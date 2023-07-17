@@ -1,10 +1,11 @@
 #!/bin/csh -f
+# This script will untar the GRACE-FO level-1B and convert files from binary to ascii
 
 if ($#argv == 0 ) then
-  echo "Runstring: sh_extract_level1B_GRACEFO YYYY MM DD filetype (3-char code e.g. KBR GNV VKB etc)  RL0X "
+  echo "Runstring: sh_extract_level1B_GRACEFO YYYY MM DD filetype (3-char code e.g. KBR GNV VKB etc) RL0X"
   exit
 endif
-set version = ~/gt/
+set version = ~/ANU_GRACE_software/
 set year = $1
 set month = $2
 set day = $3
@@ -13,17 +14,17 @@ set RL_num = `echo $5 | cut -c3-4`
 set datadir = `grep DATA_DIR GRACE_FO.input | awk '{print $3}'`
 
 # define the tar file name based on mission number
-if ($ftype != "LRI")then
+if ($ftype != "LRI") then
   set tarfile = ${datadir}/RL${RL_num}/${year}/gracefo_1B_${year}-${month}-${day}_RL${RL_num}.ascii.noLRI.tgz
 else
   set tarfile = ${datadir}/RL${RL_num}/${year}/gracefo_1B_${year}-${month}-${day}_RL${RL_num}.ascii.LRI.tgz
 endif
 
 # make a list of files required
-if( $ftype == "KBR" || $ftype == "LRI")then
+if( $ftype == "KBR" || $ftype == "LRI") then
   echo ${ftype}1B_${year}-${month}-${day}_Y_${RL_num}.txt > files.list
 
-else if ($ftype == "GNV" || $ftype == "GNI" || $ftype == "GPS" || $ftype == "ACC" || $ftype == "ACT" || $ftype == "SCA" || $ftype == "VKB" || $ftype == "VGN" || $ftype == "VCM" || $ftype == "MAS"|| $ftype == "THR"|| $ftype == "IHK" || $ftype == "IPU" || $ftype == "SOE")then
+else if ($ftype == "GNV" || $ftype == "GNI" || $ftype == "GPS" || $ftype == "ACC" || $ftype == "ACT" || $ftype == "SCA" || $ftype == "VKB" || $ftype == "VGN" || $ftype == "VCM" || $ftype == "MAS"|| $ftype == "THR"|| $ftype == "IHK" || $ftype == "IPU" || $ftype == "SOE") then
   echo ${ftype}1B_${year}-${month}-${day}_C_${RL_num}.txt > files.list
   echo ${ftype}1B_${year}-${month}-${day}_D_${RL_num}.txt >> files.list
 
@@ -36,5 +37,3 @@ endif
 echo "Extracting files from " $tarfile
 tar -xvf $tarfile -T files.list
 ls -l ${ftype}1B_${year}-${month}-${day}_?_${RL_num}.txt
-
-

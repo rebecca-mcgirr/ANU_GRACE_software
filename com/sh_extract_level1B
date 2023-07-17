@@ -1,111 +1,99 @@
 #!/bin/csh -f
-
+# This script will untar the level-1B and convert files from binary to ascii
 if ($#argv == 0 ) then
-  echo "Runstring: sh_extract_level1B YYYY MM DD filetype (3-char code e.g. KBR GNV VKB etc)  RL0X [~/ga  mission]"
+  echo "Runstring: sh_extract_level1B YYYY MM DD filetype (3-char code e.g. KBR GNV VKB etc) RL0X"
   exit
 endif
-set version=~/gt/
+set version = ~/ANU_GRACE_software
 set year = $1
 set month = $2
 set day = $3
 set filetype = $4
 set RL_num = `echo $5 | cut -c3-4`
-# PT220114: add the version of the software
-if ($#argv > 5)then
-  set version  = $6
-endif
-
-# PT190807: add a 7th argument, being the mission
-if ($#argv > 6 )then
-  set mission  = $7
-else
-  set mission = 0
-endif
 
 # set a default data directory, to be over-ridden below (possibly)
-set datadir = /scratch/compute1/geodynamics/grace_data
+set datadir = `grep DATA_DIR GRACE.input | awk '{print $3}'`
 
 # define the tar file name based on mission number
-if($mission == 0)then
-  if (-e GRACE.input)set datadir = `grep DATA_DIR GRACE.input | awk '{print $3}'`
+if ($year < 2018) then
   set tarfile = ${datadir}/RL${RL_num}/${year}/grace_1B_${year}-${month}-${day}_${RL_num}.tar.gz
   echo Extracting file ${filetype}1B from $tarfile
   tar -xvf $tarfile >& /dev/null
-else if ($mission == 1)then
-  echo "Do not use this script for extracting GRACE FO data - use sh_extract_level1B_GRACEFO instead"
+else
+  #echo "Do not use this script for extracting GRACE FO data - use sh_extract_level1B_GRACEFO instead"
+  ${version}/com/sh_extract_level1B_GRACEFO $year $month $day $filetype RL$RL_num
   exit
 endif
 
-
 # now extract the required file
-if( $filetype == "KBR")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile KBR1B_${year}-${month}-${day}_X_${RL_num}.dat -ascfile KBR1B_${year}-${month}-${day}_X_${RL_num}.asc
+if ( $filetype == "KBR") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile KBR1B_${year}-${month}-${day}_X_${RL_num}.dat -ascfile KBR1B_${year}-${month}-${day}_X_${RL_num}.asc
   ls -l KBR1B_${year}-${month}-${day}_X_${RL_num}.asc
 
-else if ($filetype == "GNV")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile GNV1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile GNV1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile GNV1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile GNV1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "GNV") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile GNV1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile GNV1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile GNV1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile GNV1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l GNV1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "GPS")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile GPS1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile GPS1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile GPS1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile GPS1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "GPS") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile GPS1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile GPS1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile GPS1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile GPS1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l GPS1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "VKB")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile VKB1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile VKB1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile VKB1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile VKB1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "VKB") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile VKB1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile VKB1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile VKB1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile VKB1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l VKB1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "VGN")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile VGN1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile VGN1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile VGN1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile VGN1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "VGN") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile VGN1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile VGN1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile VGN1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile VGN1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l VGN1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "VCM")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile VCM1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile VCM1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile VCM1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile VCM1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "VCM") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile VCM1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile VCM1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile VCM1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile VCM1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l VCM1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "MAS")then
-  ${version}/vin/Bin2AsciiLevel1.e -binfile MAS1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile MAS1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile MAS1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile MAS1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "MAS") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile MAS1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile MAS1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile MAS1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile MAS1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l MAS1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "THR")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile THR1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile THR1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile THR1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile THR1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "THR") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile THR1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile THR1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile THR1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile THR1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l THR1B_${year}-${month}-${day}_?_${RL_num}.asc
 
-else if ($filetype == "SCA")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile SCA1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile SCA1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile SCA1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile SCA1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "SCA") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile SCA1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile SCA1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile SCA1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile SCA1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l SCA1B_${year}-${month}-${day}_?_${RL_num}.asc
-else if ($filetype == "QSA")then
+else if ($filetype == "QSA") then
   echo "is this a level1B product?"
   exit
-  ${version}/bin/Bin2AsciiLevel1.e -binfile QSA1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile QSA1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile QSA1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile QSA1B_${year}-${month}-${day}_B_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile QSA1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile QSA1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile QSA1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile QSA1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l QSA1B_${year}-${month}-${day}_?_${RL_num}.asc
-else if ($filetype == "ACC")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile ACC1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile ACC1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile ACC1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile ACC1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "ACC") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile ACC1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile ACC1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile ACC1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile ACC1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l ACC1B_${year}-${month}-${day}_?_${RL_num}.asc
-else if ($filetype == "IHK")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile IHK1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile IHK1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile IHK1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile IHK1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "IHK") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile IHK1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile IHK1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile IHK1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile IHK1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l IHK1B_${year}-${month}-${day}_?_${RL_num}.asc
-else if ($filetype == "AHK")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile AHK1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile AHK1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile AHK1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile AHK1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "AHK") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile AHK1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile AHK1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile AHK1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile AHK1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l AHK1B_${year}-${month}-${day}_?_${RL_num}.asc
-else if ($filetype == "IPU")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile IPU1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile IPU1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile IPU1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile IPU1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "IPU") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile IPU1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile IPU1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile IPU1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile IPU1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l IPU1B_${year}-${month}-${day}_?_${RL_num}.asc
-else if ($filetype == "SOE")then
-  ${version}/bin/Bin2AsciiLevel1.e -binfile SOE1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile SOE1B_${year}-${month}-${day}_A_${RL_num}.asc
-  ${version}/bin/Bin2AsciiLevel1.e -binfile SOE1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile SOE1B_${year}-${month}-${day}_B_${RL_num}.asc
+else if ($filetype == "SOE") then
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile SOE1B_${year}-${month}-${day}_A_${RL_num}.dat -ascfile SOE1B_${year}-${month}-${day}_A_${RL_num}.asc
+  ${version}/GraceReadSW/RELEASE_2010-03-31/Bin2AsciiLevel1.e -binfile SOE1B_${year}-${month}-${day}_B_${RL_num}.dat -ascfile SOE1B_${year}-${month}-${day}_B_${RL_num}.asc
   ls -l SOE1B_${year}-${month}-${day}_?_${RL_num}.asc
 else
   echo "File type "$filetype"1B not coded - do it yourself!"

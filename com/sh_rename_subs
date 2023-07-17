@@ -1,8 +1,0 @@
-#!/bin/csh -f
-
-set file = $1       
-
-echo $file
-mv $file $file'.orig'
-cat $file'.orig' | sed s/"report_stat"/"status_update"/ | sed s/"kbit"/"bitmap"/ | sed s/"getcmd"/"get_keyword"/ | sed s/"getword"/"first_word"/ | sed s/"GetWord"/"first_word"/ | sed s/"casefold"/"lwr_to_upper"/ | sed s/"nblen"/"last_nonblank"/ | sed s/"getword"/"first_word"/ | sed s/"runtim"/"datetime"/ > $file
-

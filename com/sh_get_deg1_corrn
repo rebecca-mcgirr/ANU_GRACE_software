@@ -1,7 +1,0 @@
-#!/bin/csh -f
-
-# script to download a time series of degree-1 spherical harmonic coefficients as derived by Felix Landerer at JPL
-#
-# P. Tregoning
-# 5 September 2022
-
