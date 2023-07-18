@@ -1,7 +1,0 @@
-
-
-# Modifications to scripts in the pycodes directory. Commenced 5 February 2020
-
-get_rms_and_lowpass_values_clean.py  : modified to read new addnorm.fit file containing msc constraint info   Pfeffer   20200205
-get_rms_and_lowpass_values.py        : replaced by get_rms_and_lowpass_values_clean.py                        Tregoning 20200205
-
