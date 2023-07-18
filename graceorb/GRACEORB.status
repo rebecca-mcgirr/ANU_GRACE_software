@@ -1,2 +1,0 @@
-STATUS  230714:1007:18.0: GRACEORB/orbversn: graceorb: Integrate GRACE orbits and compute mascon and IC partials
-STATUS  230714:1007:18.0: GRACEORB/graceorb: Runstring: graceorb GRACE.input in_file_A/B/C/D
